@@ -31,7 +31,7 @@ spec:
   - name: path-context
     value: .
   - name: prefetch-input
-    value: [{"path": "kustomize", "type": "gomod"}, {"path": "operator-sdk", "type": "gomod"}]
+    value: [{"path": "kustomize/kustomize", "type": "gomod"}, {"path": "operator-sdk", "type": "gomod"}]
   - name: hermetic
     value: "true"
   pipelineSpec:
