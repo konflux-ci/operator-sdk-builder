@@ -17,6 +17,8 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:c0e70387664f30cd9cf2795b
 COPY LICENSE /licenses
 COPY --from=osdk-builder /opt/app-root/src/operator-sdk /bin
 COPY --from=kustomize-builder /opt/app-root/src/kustomize /bin
+
+ARG INSTALLED_RPMS="gettext make"
 RUN microdnf install -y gettext
 
 ENTRYPOINT ["/bin/operator-sdk"]
