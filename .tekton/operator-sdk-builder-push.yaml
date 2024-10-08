@@ -27,6 +27,10 @@ spec:
     value: Containerfile
   - name: path-context
     value: .
+  - name: prefetch-input
+    value: [{"path": "kustomize", "type": "gomod"}, {"path": "operator-sdk", "type": "gomod"}]
+  - name: hermetic
+    value: "true"
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while reducing network traffic.
