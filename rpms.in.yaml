@@ -1,0 +1,8 @@
+packages: [gettext, make]
+contentOrigin:
+  repofiles: ["./ubi.repo"]
+arches:
+  - aarch64
+  - x86_64
+  - ppc64le
+  - s390x
