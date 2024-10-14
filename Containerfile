@@ -20,3 +20,12 @@ ARG INSTALLED_RPMS="gettext make"
 RUN microdnf install -y gettext
 
 ENTRYPOINT ["/bin/operator-sdk"]
+
+LABEL \
+  description="Konflux image containing rebuilds for tooling to assist in building OLM operators, bundles, and catalogs." \
+  io.k8s.description="Konflux image containing rebuilds for tooling to assist in building OLM operators, bundles, and catalogs." \
+  summary="Konflux operator-sdk builder" \
+  io.k8s.display-name="Konflux operator-sdk builder" \
+  io.openshift.tags="konflux build operator-sdk OLM tekton pipeline security" \
+  name="Konflux operator-sdk builder" \
+  com.redhat.component="operator-sdk-builder"

@@ -31,6 +31,14 @@ spec:
     value: [{"path": "kustomize/kustomize", "type": "gomod"}, {"path": "operator-sdk", "type": "gomod"}, {"path": ".", "type": "rpm"}]
   - name: hermetic
     value: "true"
+  - name: build-source-image
+    value: "true"
+  - name: build-platforms
+    value:
+    - linux/x86_64
+    - linux/arm64
+    - linux/ppc64le
+    - linux/s390x
   pipelineSpec:
     description: |
       This pipeline is ideal for building multi-arch container images from a Containerfile while maintaining trust after pipeline customization.
