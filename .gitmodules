@@ -1,8 +1,12 @@
 [submodule "operator-sdk"]
 	path = operator-sdk
 	url = https://github.com/operator-framework/operator-sdk.git
-	branch = v1.37.x
+	branch = master
 [submodule "kustomize"]
 	path = kustomize
 	url = https://github.com/kubernetes-sigs/kustomize.git
-	branch = release-kustomize-v5.4.3
+	branch = master
+[submodule "operator-registry"]
+	path = operator-registry
+	url = https://github.com/operator-framework/operator-registry
+	branch = master
