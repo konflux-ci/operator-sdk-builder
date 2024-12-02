@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.5 as osdk-builder
+FROM ubi9/go-toolset:1.22.5 as osdk-builder
 
 COPY --chown=default ./operator-sdk/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
