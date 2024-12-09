@@ -1,16 +1,16 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.5 as osdk-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22.7-1733160835 as osdk-builder
 
 COPY --chown=default ./operator-sdk/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN  ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o operator-sdk cmd/operator-sdk/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.5 as opm-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22.7-1733160835 as opm-builder
 
 COPY --chown=default ./operator-registry/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o opm cmd/opm/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.5 as kustomize-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22.7-1733160835 as kustomize-builder
 
 COPY --chown=default ./kustomize/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
