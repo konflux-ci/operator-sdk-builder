@@ -18,13 +18,13 @@ arches:
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libgomp-11.5.0-2.el9.aarch64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libgomp-11.5.0-5.el9_5.aarch64.rpm
     repoid: ubi-9-baseos-rpms
-    size: 271035
-    checksum: sha256:a6232e3884444b942e851167085e7213b22e918e547e31b11480200e52923d82
+    size: 267717
+    checksum: sha256:417eeb095770944a0c25551771d9ae2ea367b3c979eba9da8a529957f49bafa5
     name: libgomp
-    evr: 11.5.0-2.el9
-    sourcerpm: gcc-11.5.0-2.el9.src.rpm
+    evr: 11.5.0-5.el9_5
+    sourcerpm: gcc-11.5.0-5.el9_5.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/m/make-4.3-8.el9.aarch64.rpm
     repoid: ubi-9-baseos-rpms
     size: 550249
@@ -50,13 +50,13 @@ arches:
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/l/libgomp-11.5.0-2.el9.ppc64le.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/l/libgomp-11.5.0-5.el9_5.ppc64le.rpm
     repoid: ubi-9-baseos-rpms
-    size: 284565
-    checksum: sha256:3b91442c479917ba6d30459b1f0be9b224d0a9e30cb6cb5d8e0887a26de52e70
+    size: 281190
+    checksum: sha256:5d693c13bc37de1de427976bcc61375d5bbb5880c1ecef9d9db22c300cae8ab3
     name: libgomp
-    evr: 11.5.0-2.el9
-    sourcerpm: gcc-11.5.0-2.el9.src.rpm
+    evr: 11.5.0-5.el9_5
+    sourcerpm: gcc-11.5.0-5.el9_5.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/m/make-4.3-8.el9.ppc64le.rpm
     repoid: ubi-9-baseos-rpms
     size: 567121
@@ -82,13 +82,13 @@ arches:
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/l/libgomp-11.5.0-2.el9.s390x.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/l/libgomp-11.5.0-5.el9_5.s390x.rpm
     repoid: ubi-9-baseos-rpms
-    size: 269215
-    checksum: sha256:5359153ab519e7cc4e65f9bf5909c0d580e4d861d8108312650cbaf023f021a2
+    size: 265956
+    checksum: sha256:1b87617f48cfe6a6280e2da37d3a6cdd30c8c3874e1a36a4b5d252acf80e113e
     name: libgomp
-    evr: 11.5.0-2.el9
-    sourcerpm: gcc-11.5.0-2.el9.src.rpm
+    evr: 11.5.0-5.el9_5
+    sourcerpm: gcc-11.5.0-5.el9_5.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/m/make-4.3-8.el9.s390x.rpm
     repoid: ubi-9-baseos-rpms
     size: 553451
@@ -114,13 +114,13 @@ arches:
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libgomp-11.5.0-2.el9.x86_64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libgomp-11.5.0-5.el9_5.x86_64.rpm
     repoid: ubi-9-baseos-rpms
-    size: 272732
-    checksum: sha256:799d62088e81f1209d2348c5c029ffaa36b436b1ddee850103a121b92d587fcd
+    size: 269396
+    checksum: sha256:da7af36960df4b59178f4d7c42353d48c53fbe231e7e62d734a4319748f897a9
     name: libgomp
-    evr: 11.5.0-2.el9
-    sourcerpm: gcc-11.5.0-2.el9.src.rpm
+    evr: 11.5.0-5.el9_5
+    sourcerpm: gcc-11.5.0-5.el9_5.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/m/make-4.3-8.el9.x86_64.rpm
     repoid: ubi-9-baseos-rpms
     size: 553896
