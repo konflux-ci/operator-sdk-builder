@@ -5,28 +5,28 @@ arches:
 - arch: aarch64
   packages:
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/g/gettext-0.21-8.el9.aarch64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-aarch64-baseos-rpms
     size: 1181385
     checksum: sha256:52f11ec908a17fedbf993ffd87f40f27067761440c433b0d0fd38f16b8d15ec4
     name: gettext
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/g/gettext-libs-0.21-8.el9.aarch64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-aarch64-baseos-rpms
     size: 295874
     checksum: sha256:b503ae5eaa875c8936ac6c28dec058d0febc6ce072c0046028bc471a37607f6a
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libgomp-11.5.0-2.el9.aarch64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-aarch64-baseos-rpms
     size: 271035
     checksum: sha256:a6232e3884444b942e851167085e7213b22e918e547e31b11480200e52923d82
     name: libgomp
     evr: 11.5.0-2.el9
     sourcerpm: gcc-11.5.0-2.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/m/make-4.3-8.el9.aarch64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-aarch64-baseos-rpms
     size: 550249
     checksum: sha256:351a22b0e6744bd329b1b0f22d9c3b69a6da970b575e6c76190cc84b0fe77450
     name: make
@@ -37,28 +37,28 @@ arches:
 - arch: ppc64le
   packages:
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/g/gettext-0.21-8.el9.ppc64le.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-ppc64le-baseos-rpms
     size: 1213573
     checksum: sha256:c3736ecb725bdba02483709480a63f3fdda58cf22a4eb5a52bcc9a6e9a655daf
     name: gettext
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/g/gettext-libs-0.21-8.el9.ppc64le.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-ppc64le-baseos-rpms
     size: 335647
     checksum: sha256:0e333e7e92951bf5c4a5b556220a6a66ca52e4124c49508f64f445d415e095af
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/l/libgomp-11.5.0-2.el9.ppc64le.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-ppc64le-baseos-rpms
     size: 284565
     checksum: sha256:3b91442c479917ba6d30459b1f0be9b224d0a9e30cb6cb5d8e0887a26de52e70
     name: libgomp
     evr: 11.5.0-2.el9
     sourcerpm: gcc-11.5.0-2.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/m/make-4.3-8.el9.ppc64le.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-ppc64le-baseos-rpms
     size: 567121
     checksum: sha256:6c3f559c10b0bfdeb892314c26622f06999b202f57d881444cc4361ec7dad88c
     name: make
@@ -69,28 +69,28 @@ arches:
 - arch: s390x
   packages:
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/appstream/os/Packages/g/gettext-0.21-8.el9.s390x.rpm
-    repoid: ubi-9-appstream-rpms
+    repoid: ubi-9-for-s390x-appstream-rpms
     size: 1183783
     checksum: sha256:9e9e3e6b40ea4ebf5fa08945938415ba48fa683955353807bb8b4ca1bd0d9a06
     name: gettext
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/appstream/os/Packages/g/gettext-libs-0.21-8.el9.s390x.rpm
-    repoid: ubi-9-appstream-rpms
+    repoid: ubi-9-for-s390x-appstream-rpms
     size: 295032
     checksum: sha256:4e0a504680f82132988df76ee1abcfc368006e47435ecbe04d39db70992f42b8
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/l/libgomp-11.5.0-2.el9.s390x.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-s390x-baseos-rpms
     size: 269215
     checksum: sha256:5359153ab519e7cc4e65f9bf5909c0d580e4d861d8108312650cbaf023f021a2
     name: libgomp
     evr: 11.5.0-2.el9
     sourcerpm: gcc-11.5.0-2.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/m/make-4.3-8.el9.s390x.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-s390x-baseos-rpms
     size: 553451
     checksum: sha256:09c0e578e23112cb98e2234f9587fe7b6def2ae6a4b16e6d52559d546389f4d1
     name: make
@@ -101,28 +101,28 @@ arches:
 - arch: x86_64
   packages:
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/g/gettext-0.21-8.el9.x86_64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-x86_64-baseos-rpms
     size: 1193150
     checksum: sha256:febf6aec8699ca352aba5a7a249ed0cb011b68c5bab17f6178f09b1035974dde
     name: gettext
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/g/gettext-libs-0.21-8.el9.x86_64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-x86_64-baseos-rpms
     size: 313328
     checksum: sha256:b319325e941e03e3e7381161889ab39473398194786a52fc1653d025211b6e1a
     name: gettext-libs
     evr: 0.21-8.el9
     sourcerpm: gettext-0.21-8.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libgomp-11.5.0-2.el9.x86_64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-x86_64-baseos-rpms
     size: 272732
     checksum: sha256:799d62088e81f1209d2348c5c029ffaa36b436b1ddee850103a121b92d587fcd
     name: libgomp
     evr: 11.5.0-2.el9
     sourcerpm: gcc-11.5.0-2.el9.src.rpm
   - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/m/make-4.3-8.el9.x86_64.rpm
-    repoid: ubi-9-baseos-rpms
+    repoid: ubi-9-for-x86_64-baseos-rpms
     size: 553896
     checksum: sha256:561f0c2251e9217c81a6c88de4d2d9231a039aaab37e8a0d2559d36ce9fa85fd
     name: make
