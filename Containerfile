@@ -1,18 +1,22 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.9-1739801907 as osdk-builder
+FROM quay.io/centos/centos:stream9 as go-builder
 
-COPY --chown=default ./operator-sdk/. /opt/app-root/src/
+RUN dnf install -y golang
+
+FROM go-builder as osdk-builder
+
+COPY --chown=root ./operator-sdk/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN  ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o operator-sdk cmd/operator-sdk/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.9-1739801907 as opm-builder
+FROM go-builder as opm-builder
 
-COPY --chown=default ./operator-registry/. /opt/app-root/src/
+COPY --chown=root ./operator-registry/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o opm cmd/opm/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22.9-1739801907 as kustomize-builder
+FROM go-builder as kustomize-builder
 
-COPY --chown=default ./kustomize/. /opt/app-root/src/
+COPY --chown=root ./kustomize/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o kustomize ./kustomize
 

@@ -39,9 +39,9 @@ spec:
     - {"path": "kustomize/kustomize", "type": "gomod"}
     - {"path": "operator-registry", "type": "gomod"}
     - {"path": "operator-sdk", "type": "gomod"}
-    - {"path": ".", "type": "rpm"}
+    # - {"path": ".", "type": "rpm"}
   - name: hermetic
-    value: "true"
+    value: "false"
   - name: build-source-image
     value: "true"
   taskRunSpecs:
