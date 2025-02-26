@@ -27,10 +27,23 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux/arm64
+    - linux/ppc64le
+    - linux/s390x
   - name: dockerfile
     value: Containerfile
   - name: path-context
     value: .
+  - name: prefetch-input
+    value:
+    - {"path": "kustomize/kustomize", "type": "gomod"}
+    - {"path": "operator-registry", "type": "gomod"}
+    - {"path": "operator-sdk", "type": "gomod"}
+    - {"path": ".", "type": "rpm"}
+  - name: hermetic
+    value: "true"
+  - name: build-source-image
+    value: "true"
   pipelineSpec:
     description: |
       This pipeline is ideal for building multi-arch container images from a Containerfile while maintaining trust after pipeline customization.
@@ -52,6 +65,8 @@ spec:
           value: task
         resolver: bundles
     params:
+    - name: dev-package-managers
+      default: "true" 
     - description: Source Repository URL
       name: git-url
       type: string
@@ -184,6 +199,8 @@ spec:
         value: $(params.output-image).prefetch
       - name: ociArtifactExpiresAfter
         value: $(params.image-expires-after)
+      - name: dev-package-managers
+        value: $(params.dev-package-managers)
       runAfter:
       - clone-repository
       taskRef:
