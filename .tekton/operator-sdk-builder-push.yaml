@@ -44,6 +44,15 @@ spec:
     value: "true"
   - name: build-source-image
     value: "true"
+  taskRunSpecs:
+  - pipelineTaskName: build-source-image
+    stepSpecs:
+      - name: build
+        computeResources:
+          requests:
+            memory: 3Gi
+          limits:
+            memory: 3Gi
   pipelineSpec:
     description: |
       This pipeline is ideal for building multi-arch container images from a Containerfile while maintaining trust after pipeline customization.
