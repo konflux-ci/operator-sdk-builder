@@ -35,24 +35,11 @@ spec:
   - name: path-context
     value: .
   - name: prefetch-input
-    value: 
-    - {"path": "kustomize/kustomize", "type": "gomod"}
-    - {"path": "operator-registry", "type": "gomod"}
-    - {"path": "operator-sdk", "type": "gomod"}
-    - {"path": ".", "type": "rpm"}
+    value: '[{"path":"kustomize/kustomize","type":"gomod"},{"path":"operator-registry","type":"gomod"},{"path":"operator-sdk","type":"gomod"},{"path":".","type":"rpm"}]'
   - name: hermetic
     value: "true"
   - name: build-source-image
     value: "true"
-  taskRunSpecs:
-  - pipelineTaskName: build-source-image
-    stepSpecs:
-      - name: build
-        computeResources:
-          requests:
-            memory: 3Gi
-          limits:
-            memory: 3Gi
   pipelineSpec:
     description: |
       This pipeline is ideal for building multi-arch container images from a Containerfile while maintaining trust after pipeline customization.
@@ -74,8 +61,8 @@ spec:
           value: task
         resolver: bundles
     params:
-    - name: dev-package-managers
-      default: "true"
+    - default: "true"
+      name: dev-package-managers
     - description: Source Repository URL
       name: git-url
       type: string
@@ -624,7 +611,17 @@ spec:
       optional: true
     - name: netrc
       optional: true
-  taskRunTemplate: {}
+  taskRunSpecs:
+  - pipelineTaskName: build-source-image
+    stepSpecs:
+    - computeResources:
+        limits:
+          memory: 3Gi
+        requests:
+          memory: 3Gi
+      name: build
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-operator-sdk-builder
   workspaces:
   - name: git-auth
     secret:
