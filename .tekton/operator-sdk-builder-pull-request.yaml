@@ -43,6 +43,8 @@ spec:
       - {"path":"operator-registry","type":"gomod"}
       # operator-sdk submodule
       - {"path":"operator-sdk","type":"gomod"}
+      # controller-tools submodule
+      - {"path":"controller-tools","type":"gomod"}
       # RPMs
       - {"path":".","type":"rpm"}
     - name: hermetic
