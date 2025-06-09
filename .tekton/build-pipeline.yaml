@@ -55,7 +55,19 @@ spec:
       description: Execute the build with network isolation
       name: hermetic
       type: string
-    - default: ""
+    - default:
+        # kustomize submodule
+        - {"path":"kustomize/kustomize","type":"gomod"}
+        - {"path":"kustomize/api","type":"gomod"}
+        - {"path":"kustomize/kyaml","type":"gomod"}
+        # operator-registry submodule
+        - {"path":"operator-registry","type":"gomod"}
+        # operator-sdk submodule
+        - {"path":"operator-sdk","type":"gomod"}
+        # controller-tools submodule
+        - {"path":"controller-tools","type":"gomod"}
+        # RPMs
+        - {"path":".","type":"rpm"}
       description: Build dependencies to be prefetched by Cachi2
       name: prefetch-input
       type: string
