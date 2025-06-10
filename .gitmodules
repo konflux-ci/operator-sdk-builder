@@ -10,3 +10,7 @@
 	path = operator-registry
 	url = https://github.com/operator-framework/operator-registry
 	branch = master
+[submodule "controller-tools"]
+	path = controller-tools
+	url = https://github.com/kubernetes-sigs/controller-tools.git
+	branch = master
