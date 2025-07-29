@@ -29,6 +29,7 @@ COPY --from=osdk-builder /opt/app-root/src/operator-sdk /bin
 COPY --from=opm-builder /opt/app-root/src/opm /bin
 COPY --from=kustomize-builder /opt/app-root/src/kustomize/kustomize /bin
 COPY --from=controller-gen-builder /opt/app-root/src/controller-gen /bin
+COPY files/policy.json /etc/containers/policy.json
 
 ARG INSTALLED_RPMS="gettext make"
 RUN microdnf install -y gettext
