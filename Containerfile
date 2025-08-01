@@ -32,7 +32,7 @@ COPY --from=controller-gen-builder /opt/app-root/src/controller-gen /bin
 COPY files/policy.json /etc/containers/policy.json
 
 ARG INSTALLED_RPMS="gettext make"
-RUN microdnf install -y ${INSTALLED_RPMS}
+RUN microdnf install -y ${INSTALLED_RPMS} && microdnf clean all
 
 ENTRYPOINT ["/bin/operator-sdk"]
 
