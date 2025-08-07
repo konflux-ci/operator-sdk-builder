@@ -1,0 +1,50 @@
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: bundle-snapshot-example
+  labels:
+    app.kubernetes.io/name: bundle-tool
+    app.kubernetes.io/component: taskrun
+spec:
+  taskRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/konflux-ci-forks/operator-sdk-builder
+    - name: revision
+      value: main
+    - name: pathInRepo
+      value: bundle-tool/tekton/tasks/bundle-snapshot-from-bundle/bundle-snapshot-from-bundle.yaml
+  params:
+  - name: BUNDLE_IMAGE
+    value: "quay.io/operator-framework/example-operator-bundle:v1.0.0"
+  - name: IDMS_PATH
+    value: ".tekton/images-mirror-set.yaml"
+  - name: ICSP_PATH
+    value: ""  # Not using legacy ICSP
+  - name: VERIFY_PROVENANCE
+    value: "true"
+  - name: OUTPUT_FILE
+    value: "generated-snapshot.yaml"
+  - name: APPLICATION_NAME
+    value: ""  # Will be extracted from bundle image
+  - name: NAMESPACE
+    value: "my-namespace"
+  - name: BUNDLE_TOOL_IMAGE
+    value: "konflux-ci/bundle-tool:latest"
+  workspaces:
+  - name: source
+    persistentVolumeClaim:
+      claimName: source-workspace-pvc
+---
+# Example PVC for the workspace
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: source-workspace-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

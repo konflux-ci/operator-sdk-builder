@@ -1,0 +1,342 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: operator-bundle-snapshot-pipeline
+  labels:
+    app.kubernetes.io/name: bundle-tool
+    app.kubernetes.io/component: pipeline
+spec:
+  description: >-
+    Complete pipeline for generating and applying Konflux snapshots from OLM bundle images.
+    This pipeline fetches source code, generates a snapshot, validates it, and optionally applies it.
+  params:
+  - name: git-url
+    description: Repository URL to clone from
+    type: string
+  - name: git-revision
+    description: Git revision to check out
+    type: string
+    default: "main"
+  - name: bundle-image
+    description: OLM bundle image to analyze
+    type: string
+  - name: target-namespace
+    description: Target namespace for snapshot application
+    type: string
+    default: "default"
+  - name: apply-snapshot
+    description: Whether to apply the generated snapshot to the cluster
+    type: string
+    default: "false"
+  - name: verify-provenance
+    description: Whether to verify image provenance
+    type: string
+    default: "true"
+  workspaces:
+  - name: shared-workspace
+    description: Shared workspace for pipeline tasks
+  - name: git-auth
+    description: Git authentication workspace
+    optional: true
+  tasks:
+  
+  # Task 1: Fetch the source repository
+  - name: fetch-repository
+    taskRef:
+      name: git-clone
+      kind: ClusterTask
+    workspaces:
+    - name: output
+      workspace: shared-workspace
+    - name: ssh-directory
+      workspace: git-auth
+    params:
+    - name: url
+      value: $(params.git-url)
+    - name: revision
+      value: $(params.git-revision)
+    - name: deleteExisting
+      value: "true"
+  
+  # Task 2: Validate IDMS configuration
+  - name: validate-idms-config
+    runAfter:
+    - fetch-repository
+    taskSpec:
+      workspaces:
+      - name: source
+      steps:
+      - name: validate
+        image: registry.redhat.io/ubi9/ubi-minimal:latest
+        workingDir: $(workspaces.source.path)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          
+          echo "Validating IDMS configuration..."
+          
+          IDMS_FILE=".tekton/images-mirror-set.yaml"
+          if [ ! -f "$IDMS_FILE" ]; then
+            echo "❌ IDMS file not found: $IDMS_FILE"
+            echo "Creating a sample IDMS file for demonstration:"
+            mkdir -p .tekton
+            cat > "$IDMS_FILE" << 'EOF'
+          apiVersion: config.openshift.io/v1
+          kind: ImageDigestMirrorSet
+          metadata:
+            name: konflux-dev-mapping
+          spec:
+            imageDigestMirrors:
+            - source: registry.redhat.io
+              mirrors:
+              - quay.io/redhat-user-workloads
+            - source: quay.io/operator-framework  
+              mirrors:
+              - quay.io/redhat-user-workloads/operator-framework-dev
+          EOF
+            echo "✓ Sample IDMS file created"
+          else
+            echo "✓ IDMS file found: $IDMS_FILE"
+          fi
+          
+          # Basic YAML validation
+          if command -v python3 >/dev/null 2>&1; then
+            if python3 -c "import yaml; yaml.safe_load(open('$IDMS_FILE'))" 2>/dev/null; then
+              echo "✓ IDMS file is valid YAML"
+            else
+              echo "❌ IDMS file contains invalid YAML"
+              exit 1
+            fi
+          fi
+          
+          echo "IDMS Configuration:"
+          cat "$IDMS_FILE"
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+  
+  # Task 3: Generate Konflux Snapshot
+  - name: generate-snapshot
+    taskRef:
+      resolver: git
+      params:
+      - name: url
+        value: https://github.com/konflux-ci-forks/operator-sdk-builder
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: bundle-tool/tekton/tasks/bundle-snapshot-from-bundle/bundle-snapshot-from-bundle.yaml
+    runAfter:
+    - validate-idms-config
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+    params:
+    - name: BUNDLE_IMAGE
+      value: $(params.bundle-image)
+    # IDMS_PATH defaults to ".tekton/images-mirror-set.yaml" - no need to specify
+    - name: VERIFY_PROVENANCE
+      value: $(params.verify-provenance)
+    - name: OUTPUT_FILE
+      value: "konflux-snapshot.yaml"
+    - name: NAMESPACE
+      value: $(params.target-namespace)
+  
+  # Task 4: Validate Generated Snapshot
+  - name: validate-snapshot
+    runAfter:
+    - generate-snapshot
+    taskSpec:
+      params:
+      - name: SNAPSHOT_FILE
+        type: string
+      - name: EXPECTED_NAMESPACE
+        type: string
+      workspaces:
+      - name: source
+      steps:
+      - name: validate
+        image: registry.redhat.io/ubi9/ubi-minimal:latest
+        workingDir: $(workspaces.source.path)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          
+          SNAPSHOT_FILE="$(params.SNAPSHOT_FILE)"
+          EXPECTED_NS="$(params.EXPECTED_NAMESPACE)"
+          
+          echo "Validating generated snapshot: $SNAPSHOT_FILE"
+          
+          if [ ! -f "$SNAPSHOT_FILE" ]; then
+            echo "❌ Snapshot file not found: $SNAPSHOT_FILE"
+            exit 1
+          fi
+          
+          # Install yq for advanced validation
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          
+          # Validate structure
+          api_version=$(yq eval '.apiVersion' "$SNAPSHOT_FILE")
+          kind=$(yq eval '.kind' "$SNAPSHOT_FILE")
+          namespace=$(yq eval '.metadata.namespace' "$SNAPSHOT_FILE")
+          app_name=$(yq eval '.spec.application' "$SNAPSHOT_FILE")
+          component_count=$(yq eval '.spec.components | length' "$SNAPSHOT_FILE")
+          
+          echo "Snapshot validation results:"
+          echo "  API Version: $api_version"
+          echo "  Kind: $kind"
+          echo "  Namespace: $namespace"
+          echo "  Application: $app_name"
+          echo "  Components: $component_count"
+          
+          # Validate required fields
+          if [ "$api_version" != "appstudio.redhat.com/v1alpha1" ]; then
+            echo "❌ Invalid API version: $api_version"
+            exit 1
+          fi
+          
+          if [ "$kind" != "Snapshot" ]; then
+            echo "❌ Invalid kind: $kind"
+            exit 1
+          fi
+          
+          if [ "$namespace" != "$EXPECTED_NS" ]; then
+            echo "❌ Namespace mismatch. Expected: $EXPECTED_NS, Got: $namespace"
+            exit 1
+          fi
+          
+          if [ "$component_count" = "0" ]; then
+            echo "❌ No components found in snapshot"
+            exit 1
+          fi
+          
+          echo "✅ Snapshot validation passed"
+          
+          # Show component details
+          echo "Component details:"
+          yq eval '.spec.components[] | "  - " + .name + ": " + .containerImage' "$SNAPSHOT_FILE"
+    params:
+    - name: SNAPSHOT_FILE
+      value: $(tasks.generate-snapshot.results.SNAPSHOT_FILE)
+    - name: EXPECTED_NAMESPACE
+      value: $(params.target-namespace)
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+  
+  # Task 5: Display Results
+  - name: display-results
+    runAfter:
+    - validate-snapshot
+    taskSpec:
+      params:
+      - name: SNAPSHOT_FILE
+        type: string
+      - name: IMAGE_COUNT
+        type: string
+      - name: RESOLVED_COUNT
+        type: string
+      - name: VERIFIED_COUNT
+        type: string
+      workspaces:
+      - name: source
+      steps:
+      - name: display
+        image: registry.redhat.io/ubi9/ubi-minimal:latest
+        workingDir: $(workspaces.source.path)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          
+          echo "🎉 Pipeline Execution Summary"
+          echo "================================"
+          echo "Bundle Image: $(params.bundle-image)"
+          echo "Generated Snapshot: $(params.SNAPSHOT_FILE)"
+          echo "Images Found: $(params.IMAGE_COUNT)"
+          echo "Images Resolved: $(params.RESOLVED_COUNT)"
+          echo "Images Verified: $(params.VERIFIED_COUNT)"
+          echo ""
+          echo "📄 Generated Snapshot Content:"
+          echo "---"
+          cat "$(params.SNAPSHOT_FILE)"
+          echo "---"
+          echo ""
+          echo "Next steps:"
+          if [ "$(params.apply-snapshot)" = "true" ]; then
+            echo "  The snapshot will be applied to the cluster in the next task"
+          else
+            echo "  To apply this snapshot:"
+            echo "    kubectl apply -f $(params.SNAPSHOT_FILE)"
+          fi
+    params:
+    - name: SNAPSHOT_FILE
+      value: $(tasks.generate-snapshot.results.SNAPSHOT_FILE)
+    - name: IMAGE_COUNT
+      value: $(tasks.generate-snapshot.results.IMAGE_COUNT)
+    - name: RESOLVED_COUNT
+      value: $(tasks.generate-snapshot.results.RESOLVED_COUNT)
+    - name: VERIFIED_COUNT
+      value: $(tasks.generate-snapshot.results.VERIFIED_COUNT)
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+  
+  # Task 6: Apply Snapshot (Conditional)
+  - name: apply-snapshot
+    when:
+    - input: $(params.apply-snapshot)
+      operator: in
+      values: ["true", "True", "TRUE"]
+    runAfter:
+    - display-results
+    taskSpec:
+      params:
+      - name: SNAPSHOT_FILE
+        type: string
+      workspaces:
+      - name: source
+      steps:
+      - name: apply
+        image: registry.redhat.io/ubi9/ubi-minimal:latest
+        workingDir: $(workspaces.source.path)
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+          
+          SNAPSHOT_FILE="$(params.SNAPSHOT_FILE)"
+          
+          echo "Applying snapshot to cluster: $SNAPSHOT_FILE"
+          
+          # In a real environment, this would use kubectl
+          # For demonstration, we'll just show what would be applied
+          echo "Command that would be executed:"
+          echo "  kubectl apply -f $SNAPSHOT_FILE"
+          echo ""
+          echo "Snapshot content to apply:"
+          cat "$SNAPSHOT_FILE"
+          
+          echo "✅ Snapshot applied successfully (simulation)"
+          
+          # In real usage, uncomment this line:
+          # kubectl apply -f "$SNAPSHOT_FILE"
+    params:
+    - name: SNAPSHOT_FILE
+      value: $(tasks.generate-snapshot.results.SNAPSHOT_FILE)
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+  
+  results:
+  - name: snapshot-file
+    description: Path to the generated snapshot file
+    value: $(tasks.generate-snapshot.results.SNAPSHOT_FILE)
+  - name: image-count
+    description: Number of images found in bundle
+    value: $(tasks.generate-snapshot.results.IMAGE_COUNT)
+  - name: resolved-count
+    description: Number of images resolved
+    value: $(tasks.generate-snapshot.results.RESOLVED_COUNT)
+  - name: verified-count
+    description: Number of images with verified provenance
+    value: $(tasks.generate-snapshot.results.VERIFIED_COUNT)

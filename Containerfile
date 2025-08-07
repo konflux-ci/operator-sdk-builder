@@ -22,6 +22,12 @@ COPY --chown=default ./controller-tools/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o controller-gen ./cmd/controller-gen
 
+FROM registry.access.redhat.com/ubi9/go-toolset:1.24.4-1753221510 as bundle-tool-builder
+
+COPY --chown=default ./bundle-tool/. /opt/app-root/src/
+WORKDIR /opt/app-root/src
+RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -tags=containers_image_openpgp -o bundle-tool ./cmd
+
 FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:0d7cfb0704f6d389942150a01a20cb182dc8ca872004ebf19010e2b622818926
 
 COPY LICENSE /licenses
@@ -29,6 +35,7 @@ COPY --from=osdk-builder /opt/app-root/src/operator-sdk /bin
 COPY --from=opm-builder /opt/app-root/src/opm /bin
 COPY --from=kustomize-builder /opt/app-root/src/kustomize/kustomize /bin
 COPY --from=controller-gen-builder /opt/app-root/src/controller-gen /bin
+COPY --from=bundle-tool-builder /opt/app-root/src/bundle-tool /bin
 COPY files/policy.json /etc/containers/policy.json
 
 ARG INSTALLED_RPMS="gettext make"

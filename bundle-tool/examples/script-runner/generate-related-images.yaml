@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: generate-related-images-example
+  labels:
+    app.kubernetes.io/name: bundle-tool
+    app.kubernetes.io/component: script-runner
+spec:
+  taskRef:
+    resolver: bundles
+    params:
+    - name: bundle
+      value: quay.io/konflux-ci/tekton-catalog/task-run-script-oci-ta:latest
+    - name: name
+      value: run-script-oci-ta
+    - name: kind
+      value: task
+  params:
+  - name: SOURCE_ARTIFACT
+    value: "oci://quay.io/my-org/source-artifacts:latest"
+  - name: ociStorage
+    value: "quay.io/my-org/artifacts"
+  - name: ociArtifactExpiresAfter
+    value: ""
+  - name: SCRIPT
+    value: "bundle-tool generate-related-images bundle/ --mirror-policy .tekton/images-mirror-set.yaml"
+  - name: SCRIPT_RUNNER_IMAGE
+    value: "quay.io/konflux-ci/operator-sdk-builder:latest"
+  - name: HERMETIC
+    value: "false"
