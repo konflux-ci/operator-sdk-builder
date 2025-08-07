@@ -1,0 +1,54 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: operator-bundle-snapshot-example
+  labels:
+    app.kubernetes.io/name: bundle-tool
+    app.kubernetes.io/component: pipelinerun
+spec:
+  pipelineRef:
+    name: operator-bundle-snapshot-pipeline
+  params:
+  - name: git-url
+    value: "https://github.com/example/example-operator"
+  - name: git-revision
+    value: "main"
+  - name: bundle-image
+    value: "quay.io/operator-framework/example-operator-bundle:v1.0.0"
+  - name: target-namespace
+    value: "operator-testing"
+  - name: apply-snapshot
+    value: "false"  # Set to "true" to actually apply the snapshot
+  - name: verify-provenance
+    value: "true"
+  workspaces:
+  - name: shared-workspace
+    persistentVolumeClaim:
+      claimName: pipeline-workspace-pvc
+  # Optional: Git authentication for private repositories
+  # - name: git-auth
+  #   secret:
+  #     secretName: git-credentials
+---
+# Example PVC for the pipeline workspace
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pipeline-workspace-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Example: How to run the pipeline with tkn CLI
+# tkn pipeline start operator-bundle-snapshot-pipeline \
+#   --param git-url=https://github.com/example/example-operator \
+#   --param git-revision=main \
+#   --param bundle-image=quay.io/operator-framework/example-operator-bundle:v1.0.0 \
+#   --param target-namespace=operator-testing \
+#   --param apply-snapshot=false \
+#   --param verify-provenance=true \
+#   --workspace name=shared-workspace,claimName=pipeline-workspace-pvc \
+#   --showlog

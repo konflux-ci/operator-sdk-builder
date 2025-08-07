@@ -1,0 +1,12 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+  name: test-mapping
+spec:
+  imageDigestMirrors:
+  - source: quay.io/test
+    mirrors:
+    - quay.io/redhat-user-workloads/test
+  - source: registry.redhat.io
+    mirrors:
+    - quay.io/redhat-user-workloads/registry

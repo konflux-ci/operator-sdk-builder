@@ -66,6 +66,8 @@ spec:
     - {path: operator-sdk, type: gomod}
         # controller-tools submodule
     - {path: controller-tools, type: gomod}
+        # bundle-tool submodule
+    - {path: bundle-tool, type: gomod}
         # RPMs
     - {path: ., type: rpm}
     description: Build dependencies to be prefetched by Cachi2

@@ -1,0 +1,236 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: bundle-snapshot-from-bundle
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/categories: Konflux, OLM
+    tekton.dev/tags: konflux, bundle, snapshot, olm
+    tekton.dev/displayName: "Bundle Snapshot from Bundle"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Creates a Konflux Snapshot from an OLM bundle image by analyzing image references,
+    resolving them using IDMS/ICSP policies, and extracting source information from SLSA provenance.
+    
+    Two usage patterns:
+    - Build-time: Bundle without provenance, requires BUNDLE_SOURCE_REPO and BUNDLE_SOURCE_COMMIT
+    - Test-time (ITS): Bundle with provenance, source info extracted automatically
+  params:
+  - name: BUNDLE_IMAGE
+    description: The OLM bundle image reference to analyze
+    type: string
+  - name: MIRROR_POLICY_PATH
+    description: Path to mirror policy file (IDMS or ICSP - auto-detected, optional)
+    type: string
+    default: ".tekton/images-mirror-set.yaml"
+  - name: VERIFY_PROVENANCE
+    description: Whether to verify image provenance using cosign
+    type: string
+    default: "true"
+  - name: OUTPUT_FILE
+    description: Output file name for the generated snapshot (relative to workspace)
+    type: string
+    default: "konflux-snapshot.yaml"
+  - name: APPLICATION_NAME
+    description: Application name in snapshot (required for build-time usage)
+    type: string
+    default: ""
+  - name: BUNDLE_SOURCE_REPO
+    description: Bundle source repository URL (required for build-time usage when bundle provenance unavailable)
+    type: string
+    default: ""
+  - name: BUNDLE_SOURCE_COMMIT
+    description: Bundle source commit SHA (required for build-time usage when bundle provenance unavailable)
+    type: string
+    default: ""
+  - name: NAMESPACE
+    description: Target namespace for the snapshot (optional - omit to use current namespace when applying)
+    type: string
+    default: ""
+  - name: BUNDLE_TOOL_IMAGE
+    description: Bundle tool container image
+    type: string
+    default: "konflux-ci/bundle-tool:latest"
+  workspaces:
+  - name: source
+    description: Workspace containing the source code and configuration files
+  results:
+  - name: SNAPSHOT_FILE
+    description: Path to the generated snapshot file
+  - name: IMAGE_COUNT
+    description: Number of images found in the bundle
+  - name: RESOLVED_COUNT
+    description: Number of images successfully resolved
+  - name: VERIFIED_COUNT
+    description: Number of images with verified provenance
+  steps:
+  - name: check-files
+    image: registry.redhat.io/ubi9/ubi-minimal:latest
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      echo "Checking for mirror policy file..."
+      
+      if [ -n "$(params.MIRROR_POLICY_PATH)" ] && [ -f "$(params.MIRROR_POLICY_PATH)" ]; then
+        echo "✓ Found mirror policy file: $(params.MIRROR_POLICY_PATH)"
+        cat "$(params.MIRROR_POLICY_PATH)"
+      else
+        echo "ℹ No mirror policy file found at $(params.MIRROR_POLICY_PATH)"
+      fi
+  
+  - name: generate-snapshot
+    image: $(params.BUNDLE_TOOL_IMAGE)
+    workingDir: $(workspaces.source.path)
+    env:
+    - name: BUNDLE_IMAGE
+      value: $(params.BUNDLE_IMAGE)
+    - name: MIRROR_POLICY_PATH
+      value: $(params.MIRROR_POLICY_PATH)
+    - name: VERIFY_PROVENANCE
+      value: $(params.VERIFY_PROVENANCE)
+    - name: OUTPUT_FILE
+      value: $(params.OUTPUT_FILE)
+    - name: APPLICATION_NAME
+      value: $(params.APPLICATION_NAME)
+    - name: BUNDLE_SOURCE_REPO
+      value: $(params.BUNDLE_SOURCE_REPO)
+    - name: BUNDLE_SOURCE_COMMIT
+      value: $(params.BUNDLE_SOURCE_COMMIT)
+    - name: NAMESPACE
+      value: $(params.NAMESPACE)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      echo "Generating Konflux snapshot from bundle: $BUNDLE_IMAGE"
+      
+      # Determine usage pattern
+      if [ -n "$BUNDLE_SOURCE_REPO" ] && [ -n "$BUNDLE_SOURCE_COMMIT" ]; then
+        echo "🔨 Build-time usage: Using provided bundle source information"
+        usage_pattern="build-time"
+      else
+        echo "🧪 Test-time usage: Extracting source information from provenance"
+        usage_pattern="test-time"
+      fi
+      
+      # Build bundle-tool command
+      cmd="bundle-tool snapshot $BUNDLE_IMAGE"
+      
+      # Add mirror policy file if it exists
+      if [ -n "$MIRROR_POLICY_PATH" ] && [ -f "$MIRROR_POLICY_PATH" ]; then
+        cmd="$cmd --mirror-policy $MIRROR_POLICY_PATH"
+        echo "Using mirror policy: $MIRROR_POLICY_PATH"
+      else
+        echo "No mirror policy specified - using original image references"
+      fi
+      
+      # Add build-time parameters if provided
+      if [ "$usage_pattern" = "build-time" ]; then
+        if [ -n "$APPLICATION_NAME" ]; then
+          cmd="$cmd --application $APPLICATION_NAME"
+        fi
+        cmd="$cmd --bundle-repo $BUNDLE_SOURCE_REPO"
+        cmd="$cmd --bundle-commit $BUNDLE_SOURCE_COMMIT"
+        echo "Build-time parameters: app=$APPLICATION_NAME, repo=$BUNDLE_SOURCE_REPO, commit=$BUNDLE_SOURCE_COMMIT"
+      fi
+      
+      # Add namespace if provided
+      if [ -n "$NAMESPACE" ]; then
+        cmd="$cmd --namespace $NAMESPACE"
+      fi
+      
+      # Add output file
+      cmd="$cmd --output $OUTPUT_FILE"
+      
+      echo "Executing: $cmd"
+      
+      # Execute command and capture output for parsing
+      output_log=$(mktemp)
+      eval "$cmd" 2>&1 | tee "$output_log"
+      
+      # Extract metrics from output
+      image_count=$(grep -o "Found [0-9]* image references" "$output_log" | grep -o "[0-9]*" || echo "0")
+      resolved_count=$(grep -o "Resolved: [0-9]*" "$output_log" | wc -l || echo "0")
+      verified_count=$(grep -o "Provenance verified: true" "$output_log" | wc -l || echo "0")
+      
+      # Write results
+      echo -n "$OUTPUT_FILE" > "$(results.SNAPSHOT_FILE.path)"
+      echo -n "$image_count" > "$(results.IMAGE_COUNT.path)"
+      echo -n "$resolved_count" > "$(results.RESOLVED_COUNT.path)"  
+      echo -n "$verified_count" > "$(results.VERIFIED_COUNT.path)"
+      
+      echo "✓ Snapshot generated successfully: $OUTPUT_FILE"
+      echo "📊 Metrics: $image_count images found, $resolved_count resolved, $verified_count verified"
+      echo "📋 Usage pattern: $usage_pattern"
+      
+      # Clean up
+      rm -f "$output_log"
+  
+  - name: validate-snapshot
+    image: registry.redhat.io/ubi9/ubi-minimal:latest
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      OUTPUT_FILE="$(params.OUTPUT_FILE)"
+      
+      if [ ! -f "$OUTPUT_FILE" ]; then
+        echo "❌ Snapshot file not found: $OUTPUT_FILE"
+        exit 1
+      fi
+      
+      echo "✓ Validating generated snapshot..."
+      
+      # Basic YAML validation
+      if ! command -v yq >/dev/null 2>&1; then
+        echo "Installing yq for validation..."
+        curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+        chmod +x /usr/local/bin/yq
+      fi
+      
+      # Validate YAML structure
+      if ! yq eval '.' "$OUTPUT_FILE" >/dev/null; then
+        echo "❌ Invalid YAML format in snapshot file"
+        exit 1
+      fi
+      
+      # Check required fields
+      api_version=$(yq eval '.apiVersion' "$OUTPUT_FILE")
+      kind=$(yq eval '.kind' "$OUTPUT_FILE")
+      app_name=$(yq eval '.spec.application' "$OUTPUT_FILE")
+      component_count=$(yq eval '.spec.components | length' "$OUTPUT_FILE")
+      
+      if [ "$api_version" != "appstudio.redhat.com/v1alpha1" ]; then
+        echo "❌ Invalid API version: $api_version"
+        exit 1
+      fi
+      
+      if [ "$kind" != "Snapshot" ]; then
+        echo "❌ Invalid kind: $kind"
+        exit 1
+      fi
+      
+      if [ "$app_name" = "null" ] || [ -z "$app_name" ]; then
+        echo "❌ Missing application name in snapshot"
+        exit 1
+      fi
+      
+      if [ "$component_count" = "0" ]; then
+        echo "❌ No components found in snapshot"
+        exit 1
+      fi
+      
+      echo "✓ Snapshot validation passed"
+      echo "   API Version: $api_version"
+      echo "   Kind: $kind"
+      echo "   Application: $app_name"
+      echo "   Components: $component_count"
+      
+      echo "📄 Generated snapshot preview:"
+      head -20 "$OUTPUT_FILE"
