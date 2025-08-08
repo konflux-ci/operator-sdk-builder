@@ -1,0 +1,32 @@
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: bundle-snapshot-oci-ta-example
+  labels:
+    app.kubernetes.io/name: bundle-tool
+    app.kubernetes.io/component: taskrun
+spec:
+  taskRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/konflux-ci-forks/operator-sdk-builder
+    - name: revision
+      value: main
+    - name: pathInRepo
+      value: bundle-tool/tekton/tasks/bundle-snapshot-from-bundle/bundle-snapshot-from-bundle-oci-ta.yaml
+  params:
+  - name: BUNDLE_IMAGE
+    value: "quay.io/operator-framework/example-operator-bundle:v1.0.0"
+  - name: IDMS_PATH
+    value: ".tekton/images-mirror-set.yaml"
+  - name: VERIFY_PROVENANCE
+    value: "true"
+  - name: OUTPUT_FILE
+    value: "generated-snapshot.yaml"
+  - name: NAMESPACE
+    value: "my-namespace"
+  - name: SOURCE_ARTIFACT
+    value: "oci://quay.io/my-org/source-artifacts:latest"
+  - name: SNAPSHOT_ARTIFACT
+    value: "oci://quay.io/my-org/snapshot-artifacts:latest"
