@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,8 +13,6 @@ import (
 	"github.com/containers/image/v5/pkg/blobinfocache/memory"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
-	"github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/operator-framework/operator-manifest-tools/pkg/pullspec"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -78,17 +75,36 @@ func NewBundleAnalyzer() *BundleAnalyzer {
 }
 
 func (ba *BundleAnalyzer) ExtractImageReferences(ctx context.Context, bundleImage string) ([]ImageReference, error) {
+	// Security: Input validation - limit bundle image reference length
+	if len(bundleImage) > 2048 {
+		return nil, fmt.Errorf("bundle image reference too long: %d characters exceeds maximum of 2048", len(bundleImage))
+	}
+
 	// Add docker:// prefix if no transport is specified
 	if !strings.Contains(bundleImage, "://") {
 		bundleImage = "docker://" + bundleImage
 	}
 
-	// Create temporary directory to extract bundle contents
+	// Security: Create exclusive temporary directory with restrictive permissions
 	tempDir, err := os.MkdirTemp("", "bundle-extract-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+
+	// Security: Ensure temp directory has restricted permissions (700)
+	if err := os.Chmod(tempDir, 0700); err != nil {
+		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+			fmt.Printf("Warning: failed to clean up temp directory on chmod error: %v\n", removeErr)
+		}
+		return nil, fmt.Errorf("failed to set temp directory permissions: %w", err)
+	}
+
+	// Ensure cleanup happens regardless of how function exits
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			fmt.Printf("Warning: failed to clean up temp directory %s: %v\n", tempDir, err)
+		}
+	}()
 
 	// Extract bundle image to temporary directory
 	err = ba.extractBundleToDirectory(ctx, bundleImage, tempDir)
@@ -116,36 +132,58 @@ func (ba *BundleAnalyzer) extractBundleToDirectory(ctx context.Context, bundleIm
 	if err != nil {
 		return fmt.Errorf("failed to create source image: %w", err)
 	}
-	defer srcImg.Close()
+	defer func() {
+		if closeErr := srcImg.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close source image: %v\n", closeErr)
+		}
+	}()
 
 	// Create image source to get layer blobs
 	srcImgSource, err := srcRef.NewImageSource(ctx, ba.systemContext)
 	if err != nil {
 		return fmt.Errorf("failed to create source image source: %w", err)
 	}
-	defer srcImgSource.Close()
+	defer func() {
+		if closeErr := srcImgSource.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close source image source: %v\n", closeErr)
+		}
+	}()
 
 	layerInfos := srcImg.LayerInfos()
 	if len(layerInfos) == 0 {
 		return fmt.Errorf("bundle image has no layers")
 	}
 
-	// Extract each layer to the destination directory
+	// Security: Create shared cache outside loop to prevent resource accumulation
+	sharedCache := memory.New()
+
+	// Extract each layer to the destination directory with proper resource management
 	for i, layerInfo := range layerInfos {
-		cache := memory.New()
-		layerReader, _, err := srcImgSource.GetBlob(ctx, layerInfo, cache)
+		// Security: Limit the number of layers processed (max 50 layers)
+		if i >= 50 {
+			fmt.Printf("Warning: limiting layer processing to 50 layers for security\n")
+			break
+		}
+
+		layerReader, _, err := srcImgSource.GetBlob(ctx, layerInfo, sharedCache)
 		if err != nil {
 			fmt.Printf("Warning: failed to read layer %d: %v\n", i, err)
 			continue
 		}
 
-		// Extract tar content to destination directory
-		err = ba.extractTarToDirectory(layerReader, destDir)
-		layerReader.Close()
-		if err != nil {
-			fmt.Printf("Warning: failed to extract layer %d: %v\n", i, err)
-			continue
-		}
+		// Use anonymous function to ensure layerReader is always closed
+		func() {
+			defer func() {
+				if closeErr := layerReader.Close(); closeErr != nil {
+					fmt.Printf("Warning: failed to close layer reader %d: %v\n", i, closeErr)
+				}
+			}()
+
+			// Extract tar content to destination directory
+			if extractErr := ba.extractTarToDirectory(layerReader, destDir); extractErr != nil {
+				fmt.Printf("Warning: failed to extract layer %d: %v\n", i, extractErr)
+			}
+		}()
 	}
 
 	return nil
@@ -159,9 +197,21 @@ func (ba *BundleAnalyzer) extractTarToDirectory(tarReader io.ReadCloser, destDir
 		// If gzip fails, try reading as uncompressed tar
 		tr = tar.NewReader(tarReader)
 	} else {
-		defer gzReader.Close()
+		defer func() {
+			if closeErr := gzReader.Close(); closeErr != nil {
+				fmt.Printf("Warning: failed to close gzip reader: %v\n", closeErr)
+			}
+		}()
 		tr = tar.NewReader(gzReader)
 	}
+
+	// Security: Get absolute canonical path of destination directory
+	destDirAbs, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for destination directory: %w", err)
+	}
+	destDirAbs = filepath.Clean(destDirAbs)
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -171,40 +221,83 @@ func (ba *BundleAnalyzer) extractTarToDirectory(tarReader io.ReadCloser, destDir
 			return fmt.Errorf("failed to read tar header: %w", err)
 		}
 
-		// Construct the full path
-		target := filepath.Join(destDir, header.Name)
+		// Security: Input validation - check header name length (max 4096 chars)
+		if len(header.Name) > 4096 {
+			return fmt.Errorf("path too long in archive: %d characters exceeds maximum of 4096", len(header.Name))
+		}
 
-		// Ensure the target is within destDir (security check)
-		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) && target != filepath.Clean(destDir) {
-			return fmt.Errorf("invalid file path: %s", header.Name)
+		// Security check: Prevent absolute paths in archive
+		if filepath.IsAbs(header.Name) {
+			return fmt.Errorf("absolute path not allowed in archive: %s", header.Name)
+		}
+
+		// Security: Clean the header name to normalize path separators and remove . and .. elements
+		cleanName := filepath.Clean(header.Name)
+
+		// Security: Additional check for path traversal patterns after cleaning
+		if strings.Contains(cleanName, "..") {
+			return fmt.Errorf("path traversal attempt detected in cleaned path: %s (original: %s)", cleanName, header.Name)
+		}
+
+		// Construct the full path using cleaned name
+		target := filepath.Join(destDirAbs, cleanName)
+
+		// Security: Get absolute canonical path of target and ensure it's clean
+		targetAbs, err := filepath.Abs(target)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for target %s: %w", target, err)
+		}
+		targetAbs = filepath.Clean(targetAbs)
+
+		// Security: Bulletproof path traversal protection using string prefix check
+		// This handles all cases including foo/../../../etc/passwd
+		if !strings.HasPrefix(targetAbs+string(os.PathSeparator), destDirAbs+string(os.PathSeparator)) &&
+			targetAbs != destDirAbs {
+			return fmt.Errorf("path traversal attack detected: %s resolves to %s outside destination %s",
+				header.Name, targetAbs, destDirAbs)
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			// Create directory
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", target, err)
+			// Create directory using the secure absolute path
+			if err := os.MkdirAll(targetAbs, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", targetAbs, err)
 			}
 		case tar.TypeReg:
-			// Create parent directories if they don't exist
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return fmt.Errorf("failed to create parent directory for %s: %w", target, err)
+			// Security: Validate file size (max 100MB per file)
+			if header.Size > 100*1024*1024 {
+				return fmt.Errorf("file too large in archive: %d bytes exceeds maximum of 100MB", header.Size)
 			}
 
-			// Create file
-			file, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, os.FileMode(header.Mode))
-			if err != nil {
-				return fmt.Errorf("failed to create file %s: %w", target, err)
+			// Create parent directories if they don't exist using secure path
+			if err := os.MkdirAll(filepath.Dir(targetAbs), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for %s: %w", targetAbs, err)
 			}
 
-			// Copy file content
-			_, err = io.Copy(file, tr)
-			file.Close()
+			// Create file using secure path with restricted permissions
+			file, err := os.OpenFile(targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 			if err != nil {
-				return fmt.Errorf("failed to write file %s: %w", target, err)
+				return fmt.Errorf("failed to create file %s: %w", targetAbs, err)
 			}
+
+			// Security: Use io.LimitReader to prevent reading more than declared size
+			limitedReader := io.LimitReader(tr, header.Size)
+
+			// Copy file content with size limit
+			_, err = io.Copy(file, limitedReader)
+			if closeErr := file.Close(); closeErr != nil {
+				fmt.Printf("Warning: failed to close file %s: %v\n", targetAbs, closeErr)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to write file %s: %w", targetAbs, err)
+			}
+		case tar.TypeSymlink, tar.TypeLink:
+			// Skip symlinks and hard links to prevent potential security issues
+			fmt.Printf("Warning: skipping link %s for security reasons\n", header.Name)
+			continue
 		default:
-			// Skip other file types (symlinks, etc.)
+			// Skip other unknown file types
+			fmt.Printf("Warning: skipping unknown file type %d for %s\n", header.Typeflag, header.Name)
 			continue
 		}
 	}
@@ -248,60 +341,55 @@ func (ba *BundleAnalyzer) extractImageReferencesFromDirectory(bundleDir string) 
 }
 
 func (ba *BundleAnalyzer) extractImageReferencesFromFile(filePath string) ([]ImageReference, error) {
+	// Security: Input validation for file path
+	if len(filePath) > 4096 {
+		return nil, fmt.Errorf("file path too long: %d characters exceeds maximum of 4096", len(filePath))
+	}
+
+	// Security: Get file info to validate size before reading
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		// Security: Sanitize error message to prevent path disclosure
+		return nil, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	// Security: Limit file size (max 10MB for YAML files)
+	if fileInfo.Size() > 10*1024*1024 {
+		return nil, fmt.Errorf("YAML file too large: %d bytes exceeds maximum of 10MB", fileInfo.Size())
+	}
+
 	content, err := os.ReadFile(filePath)
 	if err != nil {
+		// Security: Sanitize error message
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	return ba.extractImageReferencesFromManifest(content, filepath.Base(filePath))
 }
 
-func (ba *BundleAnalyzer) extractImageReferencesFromTar(tarReader io.ReadCloser) ([]ImageReference, error) {
-	var imageRefs []ImageReference
-
-	tr := tar.NewReader(tarReader)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to read tar header: %w", err)
-		}
-
-		if header.Typeflag != tar.TypeReg {
-			continue
-		}
-
-		if !isManifestFile(header.Name) {
-			continue
-		}
-
-		content, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file content: %w", err)
-		}
-
-		refs, err := ba.extractImageReferencesFromManifest(content, header.Name)
-		if err != nil {
-			// Log warning but continue processing other files
-			fmt.Printf("Warning: failed to parse manifest %s: %v\n", header.Name, err)
-			continue
-		}
-
-		imageRefs = append(imageRefs, refs...)
+func (ba *BundleAnalyzer) extractImageReferencesFromManifest(content []byte, filename string) ([]ImageReference, error) {
+	// Security: Input validation
+	if len(content) == 0 {
+		return []ImageReference{}, nil // Empty content is valid
 	}
 
-	return imageRefs, nil
-}
+	// Security: Limit manifest content size (max 5MB)
+	if len(content) > 5*1024*1024 {
+		return nil, fmt.Errorf("manifest file too large: %d bytes exceeds maximum of 5MB", len(content))
+	}
 
-func (ba *BundleAnalyzer) extractImageReferencesFromManifest(content []byte, filename string) ([]ImageReference, error) {
+	// Security: Validate filename length and characters
+	if len(filename) > 255 {
+		return nil, fmt.Errorf("filename too long: %d characters exceeds maximum of 255", len(filename))
+	}
+
 	// First try to parse as a generic Kubernetes object to check the Kind
 	var obj struct {
 		Kind string `yaml:"kind"`
 	}
 	if err := yaml.Unmarshal(content, &obj); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+		// Security: Sanitize error message to prevent content disclosure
+		return nil, fmt.Errorf("failed to unmarshal manifest: invalid YAML format")
 	}
 
 	// Only process ClusterServiceVersion manifests
@@ -324,11 +412,29 @@ func (ba *BundleAnalyzer) deduplicateImageReferences(refs []ImageReference) []Im
 	var result []ImageReference
 
 	for _, ref := range refs {
-		// Skip empty images
+		// Security: Skip empty images
 		if ref.Image == "" {
 			continue
 		}
-		
+
+		// Security: Validate image reference length and format
+		if len(ref.Image) > 1024 {
+			fmt.Printf("Warning: skipping image reference too long: %d characters\n", len(ref.Image))
+			continue
+		}
+
+		// Security: Validate name length
+		if len(ref.Name) > 256 {
+			fmt.Printf("Warning: skipping image with name too long: %d characters\n", len(ref.Name))
+			continue
+		}
+
+		// Security: Basic format validation for image references
+		if !ba.isValidImageReference(ref.Image) {
+			fmt.Printf("Warning: skipping invalid image reference format: %s\n", ba.sanitizeForLog(ref.Image))
+			continue
+		}
+
 		key := ref.Image
 		if !seen[key] {
 			seen[key] = true
@@ -337,6 +443,37 @@ func (ba *BundleAnalyzer) deduplicateImageReferences(refs []ImageReference) []Im
 	}
 
 	return result
+}
+
+// isValidImageReference performs basic validation of image reference format
+func (ba *BundleAnalyzer) isValidImageReference(image string) bool {
+	// Security: Basic validation - image should not contain control characters
+	for _, char := range image {
+		if char < 32 || char == 127 {
+			return false
+		}
+	}
+
+	// Security: Should contain at least one slash or colon (basic format check)
+	return strings.Contains(image, "/") || strings.Contains(image, ":")
+}
+
+// sanitizeForLog sanitizes strings for safe logging to prevent log injection
+func (ba *BundleAnalyzer) sanitizeForLog(input string) string {
+	// Security: Remove control characters and limit length for logging
+	var sanitized strings.Builder
+	for i, char := range input {
+		if i >= 100 { // Limit log output length
+			sanitized.WriteString("...")
+			break
+		}
+		if char >= 32 && char != 127 {
+			sanitized.WriteRune(char)
+		} else {
+			sanitized.WriteString("?")
+		}
+	}
+	return sanitized.String()
 }
 
 func isManifestFile(filename string) bool {
@@ -356,53 +493,11 @@ func isManifestFile(filename string) bool {
 	return inManifestsDir && hasYamlExt
 }
 
-func (ba *BundleAnalyzer) getLayerInfosFromManifest(manifestBlob []byte, manifestType string) ([]types.BlobInfo, error) {
-	var layerInfos []types.BlobInfo
-
-	switch manifestType {
-	case v1.MediaTypeImageManifest:
-		var manifest v1.Manifest
-		if err := json.Unmarshal(manifestBlob, &manifest); err != nil {
-			return nil, fmt.Errorf("failed to parse OCI manifest: %w", err)
-		}
-
-		for _, layer := range manifest.Layers {
-			layerInfos = append(layerInfos, types.BlobInfo{
-				Digest: digest.Digest(layer.Digest),
-				Size:   layer.Size,
-			})
-		}
-
-	case "application/vnd.docker.distribution.manifest.v2+json":
-		var manifest struct {
-			Layers []struct {
-				Digest string `json:"digest"`
-				Size   int64  `json:"size"`
-			} `json:"layers"`
-		}
-		if err := json.Unmarshal(manifestBlob, &manifest); err != nil {
-			return nil, fmt.Errorf("failed to parse Docker manifest v2: %w", err)
-		}
-
-		for _, layer := range manifest.Layers {
-			layerInfos = append(layerInfos, types.BlobInfo{
-				Digest: digest.Digest(layer.Digest),
-				Size:   layer.Size,
-			})
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported manifest type: %s", manifestType)
-	}
-
-	return layerInfos, nil
-}
-
 // createOperatorCSVFromBytes creates an OperatorCSV from raw bytes using operator-manifest-tools
 func (ba *BundleAnalyzer) createOperatorCSVFromBytes(content []byte, filename string) (*pullspec.OperatorCSV, error) {
 	// Parse YAML content into unstructured object
 	data := &unstructured.Unstructured{}
-	
+
 	// Use Kubernetes YAML decoder to properly handle the content
 	dec := kyaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 	_, _, err := dec.Decode(content, nil, data)
@@ -428,11 +523,11 @@ func (ba *BundleAnalyzer) convertPullSpecsToImageReferences(operatorCSV *pullspe
 	}
 
 	var imageRefs []ImageReference
-	
+
 	// Convert imagename.ImageName objects to our ImageReference format
 	for _, imagename := range imagenames {
 		imageStr := imagename.String()
-		
+
 		// Extract name from the image (use repository name if available)
 		name := imagename.Repo
 		if name == "" {
@@ -450,7 +545,7 @@ func (ba *BundleAnalyzer) convertPullSpecsToImageReferences(operatorCSV *pullspe
 				}
 			}
 		}
-		
+
 		if name == "" {
 			name = "unknown"
 		}

@@ -202,9 +202,9 @@ func TestDeduplicateImageReferencesWithDigests(t *testing.T) {
 // TestImageReferenceDigestParsing tests ImageReference struct with digest images
 func TestImageReferenceDigestParsing(t *testing.T) {
 	tests := []struct {
-		name       string
-		image      string
-		expectName string
+		name         string
+		image        string
+		expectName   string
 		expectDigest string
 	}{
 		{
@@ -337,8 +337,8 @@ spec:
 // TestDigestImageValidation tests validation of digest formats
 func TestDigestImageValidation(t *testing.T) {
 	tests := []struct {
-		name      string
-		image     string
+		name          string
+		image         string
 		isValidDigest bool
 	}{
 		{

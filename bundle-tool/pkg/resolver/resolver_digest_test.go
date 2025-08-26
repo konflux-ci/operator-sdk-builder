@@ -1,7 +1,6 @@
 package resolver
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -77,7 +76,7 @@ spec:
 			imageRefs := []bundle.ImageReference{
 				{Image: tt.imageRef, Name: "test"},
 			}
-			
+
 			resolved, err := resolver.ResolveImageReferences(imageRefs)
 			if err != nil {
 				t.Fatalf("ResolveImageReferences failed: %v", err)
@@ -103,10 +102,10 @@ spec:
 // TestDigestImageMirroringComplexScenarios tests complex digest mirroring scenarios
 func TestDigestImageMirroringComplexScenarios(t *testing.T) {
 	tests := []struct {
-		name       string
-		imageRef   string
-		expected   string
-		changed    bool
+		name     string
+		imageRef string
+		expected string
+		changed  bool
 	}{
 		{
 			name:     "multi-level registry with digest",
@@ -175,7 +174,7 @@ spec:
 			imageRefs := []bundle.ImageReference{
 				{Image: tt.imageRef, Name: "test"},
 			}
-			
+
 			resolved, err := resolver.ResolveImageReferences(imageRefs)
 			if err != nil {
 				t.Fatalf("ResolveImageReferences failed: %v", err)
@@ -246,7 +245,7 @@ spec:
 	for i, imageRef := range imageRefs {
 		inputRefs[i] = bundle.ImageReference{Image: imageRef, Name: "test"}
 	}
-	
+
 	resolved, err := resolver.ResolveImageReferences(inputRefs)
 	if err != nil {
 		t.Fatalf("ResolveImageReferences failed: %v", err)
@@ -305,17 +304,23 @@ spec:
     - internal.registry.io/openshift
 `
 
-	tmpFile, err := ioutil.TempFile("", "icsp-digest-test-*.yaml")
+	tmpFile, err := os.CreateTemp("", "icsp-digest-test-*.yaml")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			t.Logf("Warning: failed to remove temp file: %v", err)
+		}
+	}()
 
 	_, err = tmpFile.Write([]byte(icspContent))
 	if err != nil {
 		t.Fatalf("failed to write ICSP content: %v", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("failed to close temp file: %v", err)
+	}
 
 	resolver := NewImageResolver()
 	err = resolver.LoadMirrorPolicy(tmpFile.Name())
@@ -329,7 +334,7 @@ spec:
 			imageRefs := []bundle.ImageReference{
 				{Image: tt.imageRef, Name: "test"},
 			}
-			
+
 			resolved, err := resolver.ResolveImageReferences(imageRefs)
 			if err != nil {
 				t.Fatalf("ResolveImageReferences failed: %v", err)
@@ -355,12 +360,12 @@ spec:
 // TestMixedTagAndDigestResolution tests resolution of mixed tag and digest images
 func TestMixedTagAndDigestResolution(t *testing.T) {
 	imageRefs := []string{
-		"quay.io/test/operator:v1.0.0",                                                                           // tag
-		"quay.io/test/operator@sha256:a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890",        // digest
-		"quay.io/test/webhook:latest",                                                                            // tag
-		"quay.io/test/webhook@sha256:b2c3d4e5f6789012345678901234567890123456789012345678901234567890a1",         // digest
-		"quay.io/test/proxy:v2.0.0@sha256:c3d4e5f6789012345678901234567890123456789012345678901234567890a1b2",     // tag+digest
-		"registry.example.com/app@sha256:d4e5f6789012345678901234567890123456789012345678901234567890a1b2c3",       // digest, no mirror
+		"quay.io/test/operator:v1.0.0", // tag
+		"quay.io/test/operator@sha256:a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890", // digest
+		"quay.io/test/webhook:latest", // tag
+		"quay.io/test/webhook@sha256:b2c3d4e5f6789012345678901234567890123456789012345678901234567890a1",      // digest
+		"quay.io/test/proxy:v2.0.0@sha256:c3d4e5f6789012345678901234567890123456789012345678901234567890a1b2", // tag+digest
+		"registry.example.com/app@sha256:d4e5f6789012345678901234567890123456789012345678901234567890a1b2c3",  // digest, no mirror
 	}
 
 	expectedResults := []string{
@@ -400,7 +405,7 @@ spec:
 			inputRefs := []bundle.ImageReference{
 				{Image: imageRef, Name: "test"},
 			}
-			
+
 			resolved, err := resolver.ResolveImageReferences(inputRefs)
 			if err != nil {
 				t.Fatalf("ResolveImageReferences failed: %v", err)
@@ -488,7 +493,7 @@ spec:
 			imageRefs := []bundle.ImageReference{
 				{Image: tt.imageRef, Name: "test"},
 			}
-			
+
 			resolved, err := resolver.ResolveImageReferences(imageRefs)
 			if err != nil {
 				t.Fatalf("ResolveImageReferences failed: %v", err)

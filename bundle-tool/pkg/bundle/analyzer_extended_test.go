@@ -12,18 +12,18 @@ func TestImageReferenceEdgeCases(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "image reference with name",
-			ref:  ImageReference{Image: "quay.io/test/app:v1.0.0", Name: "app"},
+			name:     "image reference with name",
+			ref:      ImageReference{Image: "quay.io/test/app:v1.0.0", Name: "app"},
 			expected: "app: quay.io/test/app:v1.0.0",
 		},
 		{
-			name: "image reference without name",
-			ref:  ImageReference{Image: "docker.io/library/nginx:latest", Name: ""},
+			name:     "image reference without name",
+			ref:      ImageReference{Image: "docker.io/library/nginx:latest", Name: ""},
 			expected: "docker.io/library/nginx:latest",
 		},
 		{
-			name: "empty image reference",
-			ref:  ImageReference{Image: "", Name: ""},
+			name:     "empty image reference",
+			ref:      ImageReference{Image: "", Name: ""},
 			expected: "",
 		},
 	}
@@ -48,8 +48,8 @@ func TestImageReferenceEdgeCases(t *testing.T) {
 	}
 }
 
-// TestExtractDigestEdgeCases tests more edge cases for digest extraction
-func TestExtractDigestEdgeCases(t *testing.T) {
+// TestExtractDigestExtendedCases tests more edge cases for digest extraction
+func TestExtractDigestExtendedCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		image    string
@@ -243,11 +243,12 @@ func TestDeduplicateImageReferencesExtensive(t *testing.T) {
 			input: func() []ImageReference {
 				refs := make([]ImageReference, 100)
 				for i := 0; i < 100; i++ {
-					if i%3 == 0 {
+					switch i % 3 {
+					case 0:
 						refs[i] = ImageReference{Image: "quay.io/test/app1:v1.0.0", Name: "app1"}
-					} else if i%3 == 1 {
+					case 1:
 						refs[i] = ImageReference{Image: "quay.io/test/app2:v1.0.0", Name: "app2"}
-					} else {
+					case 2:
 						refs[i] = ImageReference{Image: "quay.io/test/app3:v1.0.0", Name: "app3"}
 					}
 				}
@@ -266,7 +267,7 @@ func TestDeduplicateImageReferencesExtensive(t *testing.T) {
 			// Create analyzer to access the method
 			analyzer := NewBundleAnalyzer()
 			result := analyzer.deduplicateImageReferences(tt.input)
-			
+
 			if len(result) != len(tt.expected) {
 				t.Errorf("DeduplicateImageReferences() returned %d items, want %d", len(result), len(tt.expected))
 			}

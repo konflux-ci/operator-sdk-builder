@@ -1,3 +1,13 @@
 bin
 bundle-tool/bin
 bundle-tool/bin/*
+
+# Generated test coverage files
+*.out
+coverage.html
+pkg_coverage.out
+
+# Generated example files (should be created dynamically)
+*-snapshot.yaml
+
+.serena

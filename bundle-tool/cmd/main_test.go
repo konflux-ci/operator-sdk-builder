@@ -9,17 +9,17 @@ func TestRootCommand(t *testing.T) {
 	if rootCmd == nil {
 		t.Fatal("rootCmd should not be nil")
 	}
-	
+
 	if rootCmd.Use != "bundle-tool" {
 		t.Errorf("Expected root command use to be 'bundle-tool', got '%s'", rootCmd.Use)
 	}
-	
+
 	// Check that commands are registered
 	commands := rootCmd.Commands()
 	if len(commands) < 2 {
 		t.Errorf("Expected at least 2 subcommands, got %d", len(commands))
 	}
-	
+
 	// Check for specific commands
 	var hasSnapshot, hasGenerateRelated bool
 	for _, cmd := range commands {
@@ -30,11 +30,11 @@ func TestRootCommand(t *testing.T) {
 			hasGenerateRelated = true
 		}
 	}
-	
+
 	if !hasSnapshot {
 		t.Error("snapshot command not found")
 	}
-	
+
 	if !hasGenerateRelated {
 		t.Error("generate-related-images command not found")
 	}

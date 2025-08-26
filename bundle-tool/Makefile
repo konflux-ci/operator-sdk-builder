@@ -40,6 +40,10 @@ lint:
 
 # Run tests
 test:
+	$(GOTEST) -v -coverprofile=coverage.out ./...
+
+# Run tests with race detection
+test-race:
 	$(GOTEST) -v -race -coverprofile=coverage.out ./...
 
 # Run tests with coverage report

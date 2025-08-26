@@ -1,7 +1,6 @@
 package resolver
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -11,19 +10,19 @@ import (
 // Helper function to create temporary mirror policy files for testing
 func createTempMirrorPolicy(t *testing.T, content string) string {
 	t.Helper()
-	tmpFile, err := ioutil.TempFile("", "mirror-policy-*.yaml")
+	tmpFile, err := os.CreateTemp("", "mirror-policy-*.yaml")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	
+
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
-	
+
 	if err := tmpFile.Close(); err != nil {
 		t.Fatalf("failed to close temp file: %v", err)
 	}
-	
+
 	return tmpFile.Name()
 }
 
@@ -163,7 +162,7 @@ spec:
 
 func TestImageResolverCSVWorkflow(t *testing.T) {
 	// Test the complete workflow that would happen with a CSV
-	
+
 	// Simulate images extracted from a CSV
 	csvImages := []bundle.ImageReference{
 		{Image: "quay.io/operator/controller:v1.0.0", Name: "controller"},
@@ -201,16 +200,16 @@ spec:
 	}
 
 	expectedMappings := map[string]string{
-		"quay.io/operator/controller:v1.0.0":          "quay.io/redhat-user-workloads/operator-ns/operator/controller:v1.0.0",
-		"quay.io/operator/webhook:v1.0.0":             "quay.io/redhat-user-workloads/operator-ns/operator/webhook:v1.0.0",
-		"registry.redhat.io/ubi9/ubi-minimal:9.1":     "quay.io/redhat-user-workloads/registry-mirror/ubi9/ubi-minimal:9.1",
-		"docker.io/library/busybox:latest":            "docker.io/library/busybox:latest", // no mapping
+		"quay.io/operator/controller:v1.0.0":      "quay.io/redhat-user-workloads/operator-ns/operator/controller:v1.0.0",
+		"quay.io/operator/webhook:v1.0.0":         "quay.io/redhat-user-workloads/operator-ns/operator/webhook:v1.0.0",
+		"registry.redhat.io/ubi9/ubi-minimal:9.1": "quay.io/redhat-user-workloads/registry-mirror/ubi9/ubi-minimal:9.1",
+		"docker.io/library/busybox:latest":        "docker.io/library/busybox:latest", // no mapping
 	}
 
 	for i, resolved := range resolvedImages {
 		original := csvImages[i].Image
 		expected := expectedMappings[original]
-		
+
 		if resolved.Image != expected {
 			t.Errorf("image mapping for '%s': expected '%s', got '%s'", original, expected, resolved.Image)
 		}
@@ -228,9 +227,9 @@ spec:
 
 func TestImageResolverEdgeCases(t *testing.T) {
 	tests := []struct {
-		name      string
-		imageRef  string
-		expected  string
+		name     string
+		imageRef string
+		expected string
 	}{
 		{
 			name:     "image with digest",

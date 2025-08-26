@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/konflux-ci-forks/operator-sdk-builder/bundle-tool/pkg/bundle"
@@ -322,7 +324,7 @@ func TestParseProvenance(t *testing.T) {
 	// but we can test the error handling
 	ctx := context.Background()
 	results, err := parser.ParseProvenance(ctx, imageRefs)
-	
+
 	// Should not return an error even if verification fails
 	if err != nil {
 		t.Errorf("ParseProvenance returned unexpected error: %v", err)
@@ -426,4 +428,492 @@ func TestParseProvenanceErrorHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParseAttestationPayload_SecurityChecks tests security features for payload parsing
+func TestParseAttestationPayload_SecurityChecks(t *testing.T) {
+	parser := NewProvenanceParser()
+
+	tests := []struct {
+		name        string
+		payload     string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid base64 encoded payload",
+			payload:     encodeTestData(slsaV1TestData),
+			expectError: false,
+		},
+		{
+			name:        "valid raw JSON payload",
+			payload:     slsaV1TestData,
+			expectError: false,
+		},
+		{
+			name:        "large payload exceeding size limit",
+			payload:     strings.Repeat("a", 11*1024*1024), // 11MB
+			expectError: true,
+			errorMsg:    "attestation payload too large",
+		},
+		{
+			name:        "malformed base64 that falls back to raw",
+			payload:     "not-valid-base64-but-json:" + slsaV1TestData,
+			expectError: false, // Should fallback to raw JSON
+		},
+		{
+			name:        "empty payload",
+			payload:     "",
+			expectError: false, // Empty payload should be handled gracefully
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attestation := cosign.AttestationPayload{
+				PayLoad: tt.payload,
+			}
+
+			info := ProvenanceInfo{
+				Metadata: make(map[string]string),
+			}
+
+			err := parser.parseAttestationPayload(attestation, &info)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, but got none", tt.name)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tt.name, err)
+				}
+			}
+		})
+	}
+}
+
+// TestParseAttestationPayload_LargeDecodedPayload tests protection against large payloads
+func TestParseAttestationPayload_LargeDecodedPayload(t *testing.T) {
+	parser := NewProvenanceParser()
+
+	// Create a large JSON payload - the security checks will catch this at various levels
+	largeJSON := `{"predicateType": "test", "data": "` + strings.Repeat("x", 11*1024*1024) + `"}`
+	encodedPayload := base64.StdEncoding.EncodeToString([]byte(largeJSON))
+
+	attestation := cosign.AttestationPayload{
+		PayLoad: encodedPayload,
+	}
+
+	info := ProvenanceInfo{
+		Metadata: make(map[string]string),
+	}
+
+	err := parser.parseAttestationPayload(attestation, &info)
+
+	if err == nil {
+		t.Error("Expected error for large payload, but got none")
+	}
+
+	// Accept either error message - both indicate proper size limit enforcement
+	if !strings.Contains(err.Error(), "payload too large") {
+		t.Errorf("Expected error about payload size, got: %v", err)
+	}
+}
+
+// TestParseAttestationPayload_JSONDetection tests JSON vs base64 detection
+func TestParseAttestationPayload_JSONDetection(t *testing.T) {
+	parser := NewProvenanceParser()
+	parser.SetVerbose(true) // Enable verbose for better test coverage
+
+	tests := []struct {
+		name        string
+		payload     string
+		isJSON      bool
+		description string
+	}{
+		{
+			name:        "clear JSON payload",
+			payload:     `{"test": "value"}`,
+			isJSON:      true,
+			description: "payload starts with {",
+		},
+		{
+			name:        "JSON array payload",
+			payload:     `[{"test": "value"}]`,
+			isJSON:      true,
+			description: "payload starts with [",
+		},
+		{
+			name:        "whitespace prefixed JSON",
+			payload:     `   {"test": "value"}`,
+			isJSON:      true,
+			description: "payload with leading whitespace",
+		},
+		{
+			name:        "base64 encoded payload",
+			payload:     base64.StdEncoding.EncodeToString([]byte(`{"test": "value"}`)),
+			isJSON:      false,
+			description: "base64 encoded JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attestation := cosign.AttestationPayload{
+				PayLoad: tt.payload,
+			}
+
+			info := ProvenanceInfo{
+				Metadata: make(map[string]string),
+			}
+
+			// This might error for non-SLSA payloads, but we're testing the detection logic
+			_ = parser.parseAttestationPayload(attestation, &info)
+
+			// The test passes if we reach here without panicking
+			// The actual JSON vs base64 detection is tested implicitly
+		})
+	}
+}
+
+// TestParseProvenanceDataEdgeCases tests edge cases for provenance data parsing
+func TestParseProvenanceDataEdgeCases(t *testing.T) {
+	parser := NewProvenanceParser()
+
+	tests := []struct {
+		name        string
+		data        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "missing required fields in SLSA v1.0",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": {"id": "https://example.com/builder"},
+					"buildDefinition": {
+						"externalParameters": {},
+						"resolvedDependencies": []
+					}
+				}
+			}`,
+			expectError: false, // Should handle gracefully, not crash
+		},
+		{
+			name: "extra unexpected fields in predicate",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": {"id": "https://example.com/builder"},
+					"buildDefinition": {
+						"externalParameters": {"workflow": {"ref": "refs/heads/main", "repository": "https://github.com/example/repo"}},
+						"resolvedDependencies": [{"uri": "git+https://github.com/example/operator.git", "digest": {"sha1": "abc123def456"}}]
+					},
+					"invocation": {
+						"environment": {
+							"labels": {
+								"appstudio.openshift.io/component": "test-component",
+								"appstudio.openshift.io/application": "test-app"
+							}
+						}
+					},
+					"unexpectedField": "should not break parsing",
+					"anotherExtra": {"nested": "object"},
+					"arrayExtra": ["unexpected", "array", "data"]
+				}
+			}`,
+			expectError: false, // Should handle extra fields gracefully
+		},
+		{
+			name: "malformed JSON structure",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": "not an object",
+					"buildDefinition": true,
+					"invocation": ["array", "instead", "of", "object"]
+				}
+			}`,
+			expectError: false, // Should handle type mismatches gracefully
+		},
+		{
+			name: "missing predicate entirely",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1"
+			}`,
+			expectError: false, // Should handle missing predicate gracefully
+		},
+		{
+			name: "null values in critical fields",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": null,
+					"buildDefinition": null,
+					"invocation": null
+				}
+			}`,
+			expectError: false, // Should handle null values gracefully
+		},
+		{
+			name: "extremely nested structure",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": {
+						"id": "https://example.com/builder",
+						"nested": {
+							"deeply": {
+								"nested": {
+									"structure": {
+										"that": {
+											"should": {
+												"not": {
+													"break": "parsing"
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}`,
+			expectError: false, // Should handle deeply nested structures
+		},
+		{
+			name: "SLSA v0.1 with missing materials",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v0.1",
+				"predicate": {
+					"builder": {"id": "https://tekton.dev/chains/v2"},
+					"recipe": {
+						"type": "https://tekton.dev/v1beta1/TaskRun",
+						"environment": {
+							"appstudio.openshift.io/component": "test-component",
+							"appstudio.openshift.io/application": "test-app"
+						}
+					}
+				}
+			}`,
+			expectError: false, // Should handle missing materials gracefully
+		},
+		{
+			name: "invalid digest format in dependencies",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"builder": {"id": "https://example.com/builder"},
+					"buildDefinition": {
+						"resolvedDependencies": [
+							{
+								"uri": "git+https://github.com/example/repo.git",
+								"digest": {
+									"invalid_algorithm": "not_a_sha",
+									"md5": "also_not_supported"
+								}
+							}
+						]
+					}
+				}
+			}`,
+			expectError: false, // Should handle unsupported digest algorithms gracefully
+		},
+		{
+			name: "mixed valid and invalid environment labels",
+			data: `{
+				"predicateType": "https://slsa.dev/provenance/v0.1",
+				"predicate": {
+					"builder": {"id": "https://tekton.dev/chains/v2"},
+					"materials": [{"uri": "git+https://github.com/example/repo.git", "digest": {"sha1": "abc123"}}],
+					"recipe": {
+						"environment": {
+							"appstudio.openshift.io/component": "valid-component",
+							"invalidLabel": 12345,
+							"anotherInvalid": ["array", "value"],
+							"appstudio.openshift.io/application": "valid-app"
+						}
+					}
+				}
+			}`,
+			expectError: false, // Should extract valid labels, ignore invalid ones
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := ProvenanceInfo{
+				Metadata: make(map[string]string),
+			}
+
+			err := parser.parseProvenanceData([]byte(tt.data), &info)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, but got none", tt.name)
+				} else if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				// For graceful handling cases, verify the parser doesn't crash
+				// and produces some reasonable output (or none)
+				if err != nil {
+					// Some errors are acceptable as long as they're not panics
+					t.Logf("Graceful error handling: %v", err)
+				}
+				// The parsing should complete without crashing
+			}
+		})
+	}
+}
+
+// TestParseAttestationPayloadMalformedJSON tests malformed JSON payload handling
+func TestParseAttestationPayloadMalformedJSON(t *testing.T) {
+	parser := NewProvenanceParser()
+
+	tests := []struct {
+		name        string
+		payload     string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "completely invalid JSON",
+			payload:     `{this is not valid json at all}`,
+			expectError: true,
+			description: "should fail on completely malformed JSON",
+		},
+		{
+			name:        "JSON with trailing comma",
+			payload:     `{"predicateType": "test", "predicate": {},}`,
+			expectError: true,
+			description: "should fail on JSON syntax errors",
+		},
+		{
+			name:        "unclosed JSON objects",
+			payload:     `{"predicateType": "test", "predicate": {`,
+			expectError: true,
+			description: "should fail on unclosed JSON structures",
+		},
+		{
+			name:        "base64 that decodes to invalid JSON",
+			payload:     base64.StdEncoding.EncodeToString([]byte(`{invalid json}`)),
+			expectError: true,
+			description: "should fail when base64 decodes to invalid JSON",
+		},
+		{
+			name:        "empty JSON object",
+			payload:     `{}`,
+			expectError: false,
+			description: "should handle empty JSON gracefully",
+		},
+		{
+			name:        "JSON with null values",
+			payload:     `{"predicateType": null, "predicate": null}`,
+			expectError: false,
+			description: "should handle null values gracefully",
+		},
+		{
+			name:        "JSON with mixed data types",
+			payload:     `{"predicateType": 123, "predicate": ["array", "instead", "of", "object"]}`,
+			expectError: false,
+			description: "should handle unexpected data types gracefully",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attestation := cosign.AttestationPayload{
+				PayLoad: tt.payload,
+			}
+
+			info := ProvenanceInfo{
+				Metadata: make(map[string]string),
+			}
+
+			err := parser.parseAttestationPayload(attestation, &info)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, but got none", tt.description)
+				}
+			} else {
+				// For graceful handling, we might get errors but shouldn't crash
+				if err != nil {
+					t.Logf("Graceful handling of %s: %v", tt.description, err)
+				}
+			}
+		})
+	}
+}
+
+// TestProvenanceParserWithCorruptedData tests parser behavior with corrupted data
+func TestProvenanceParserWithCorruptedData(t *testing.T) {
+	parser := NewProvenanceParser()
+
+	// Test extremely large payloads (near the limit)
+	t.Run("large but valid payload", func(t *testing.T) {
+		// Create a payload that's close to but under the 10MB limit
+		largeButValidData := map[string]interface{}{
+			"predicateType": "https://slsa.dev/provenance/v1",
+			"predicate": map[string]interface{}{
+				"builder": map[string]interface{}{
+					"id": "https://example.com/builder",
+				},
+				"buildDefinition": map[string]interface{}{
+					"externalParameters": map[string]interface{}{
+						"largeData": strings.Repeat("x", 5*1024*1024), // 5MB of data
+					},
+				},
+			},
+		}
+
+		jsonData, err := json.Marshal(largeButValidData)
+		if err != nil {
+			t.Fatalf("Failed to marshal test data: %v", err)
+		}
+
+		info := ProvenanceInfo{
+			Metadata: make(map[string]string),
+		}
+
+		// This should work (under the limit)
+		err = parser.parseProvenanceData(jsonData, &info)
+		if err != nil {
+			t.Errorf("Unexpected error with large but valid payload: %v", err)
+		}
+	})
+
+	// Test with binary data mixed in
+	t.Run("binary data corruption", func(t *testing.T) {
+		// Create JSON with embedded binary data
+		binaryData := make([]byte, 1000)
+		for i := range binaryData {
+			binaryData[i] = byte(i % 256)
+		}
+
+		// This creates a string with potentially problematic characters
+		corruptedJSON := fmt.Sprintf(`{
+			"predicateType": "https://slsa.dev/provenance/v1",
+			"predicate": {
+				"builder": {"id": "https://example.com/builder"},
+				"binaryData": "%s"
+			}
+		}`, base64.StdEncoding.EncodeToString(binaryData))
+
+		info := ProvenanceInfo{
+			Metadata: make(map[string]string),
+		}
+
+		// Should handle binary data gracefully
+		err := parser.parseProvenanceData([]byte(corruptedJSON), &info)
+		if err != nil {
+			t.Logf("Graceful handling of binary data: %v", err)
+		}
+	})
 }

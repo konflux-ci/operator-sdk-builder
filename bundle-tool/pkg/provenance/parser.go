@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/konflux-ci-forks/operator-sdk-builder/bundle-tool/pkg/bundle"
@@ -34,7 +35,7 @@ type SLSAAttestation struct {
 		Builder struct {
 			ID string `json:"id"`
 		} `json:"builder"`
-		
+
 		// SLSA v1.0 format
 		BuildDefinition struct {
 			ExternalParameters   map[string]interface{} `json:"externalParameters"`
@@ -48,7 +49,7 @@ type SLSAAttestation struct {
 				Labels map[string]string `json:"labels"`
 			} `json:"environment"`
 		} `json:"invocation"`
-		
+
 		// SLSA v0.1 format
 		Materials []struct {
 			URI    string            `json:"uri"`
@@ -61,7 +62,7 @@ type SLSAAttestation struct {
 			Arguments         map[string]interface{} `json:"arguments,omitempty"`
 			Environment       map[string]interface{} `json:"environment,omitempty"`
 		} `json:"recipe"`
-		
+
 		// Common fields
 		RunDetails struct {
 			Builder struct {
@@ -76,13 +77,40 @@ type SLSAAttestation struct {
 
 // ProvenanceParser handles parsing of image provenance using cosign SDK
 type ProvenanceParser struct {
-	verbose bool
+	verbose           bool
+	maxAttestations   int           // Security: Limit number of attestations processed
+	maxPayloadSize    int64         // Security: Maximum payload size
+	processingTimeout time.Duration // Security: Timeout for long-running operations
 }
 
-// NewProvenanceParser creates a new ProvenanceParser
+// NewProvenanceParser creates a new ProvenanceParser with secure defaults
 func NewProvenanceParser() *ProvenanceParser {
 	return &ProvenanceParser{
-		verbose: false,
+		verbose:           false,
+		maxAttestations:   50,               // Security: Limit to 50 attestations per image
+		maxPayloadSize:    10 * 1024 * 1024, // Security: 10MB limit per payload
+		processingTimeout: 30 * time.Second, // Security: 30 second timeout
+	}
+}
+
+// SetMaxAttestations sets the maximum number of attestations to process per image
+func (pp *ProvenanceParser) SetMaxAttestations(max int) {
+	if max > 0 && max <= 1000 { // Reasonable upper bound
+		pp.maxAttestations = max
+	}
+}
+
+// SetMaxPayloadSize sets the maximum payload size in bytes
+func (pp *ProvenanceParser) SetMaxPayloadSize(size int64) {
+	if size > 0 && size <= 100*1024*1024 { // Max 100MB
+		pp.maxPayloadSize = size
+	}
+}
+
+// SetProcessingTimeout sets the timeout for processing operations
+func (pp *ProvenanceParser) SetProcessingTimeout(timeout time.Duration) {
+	if timeout > 0 && timeout <= 5*time.Minute { // Max 5 minutes
+		pp.processingTimeout = timeout
 	}
 }
 
@@ -91,11 +119,24 @@ func (pp *ProvenanceParser) SetVerbose(verbose bool) {
 	pp.verbose = verbose
 }
 
-// ParseProvenance parses provenance for a list of image references
+// ParseProvenance parses provenance for a list of image references with input validation
 func (pp *ProvenanceParser) ParseProvenance(ctx context.Context, imageRefs []bundle.ImageReference) ([]ProvenanceInfo, error) {
+	// Security: Limit number of image references processed
+	if len(imageRefs) > 1000 {
+		return nil, fmt.Errorf("too many image references: %d exceeds maximum of 1000", len(imageRefs))
+	}
+
 	var results []ProvenanceInfo
 
-	for _, ref := range imageRefs {
+	for i, ref := range imageRefs {
+		// Security: Validate image reference
+		if err := pp.validateImageReference(ref); err != nil {
+			if pp.verbose {
+				fmt.Printf("Warning: skipping invalid image reference %d: %v\n", i, err)
+			}
+			continue
+		}
+
 		info := ProvenanceInfo{
 			ImageRef: ref.Image,
 			Metadata: make(map[string]string),
@@ -124,15 +165,46 @@ func (pp *ProvenanceParser) ParseProvenance(ctx context.Context, imageRefs []bun
 	return results, nil
 }
 
-// parseImageProvenance parses a single image's provenance using cosign SDK
+// validateImageReference performs security validation on image references
+func (pp *ProvenanceParser) validateImageReference(ref bundle.ImageReference) error {
+	// Security: Validate image reference length
+	if len(ref.Image) > 1024 {
+		return fmt.Errorf("image reference too long: %d characters exceeds maximum of 1024", len(ref.Image))
+	}
+
+	// Security: Validate name length
+	if len(ref.Name) > 256 {
+		return fmt.Errorf("image name too long: %d characters exceeds maximum of 256", len(ref.Name))
+	}
+
+	// Security: Check for control characters in image reference
+	for _, char := range ref.Image {
+		if char < 32 || char == 127 {
+			return fmt.Errorf("invalid character in image reference")
+		}
+	}
+
+	// Security: Basic format validation
+	if ref.Image == "" {
+		return fmt.Errorf("empty image reference")
+	}
+
+	return nil
+}
+
+// parseImageProvenance parses a single image's provenance using cosign SDK with timeout protection
 func (pp *ProvenanceParser) parseImageProvenance(ctx context.Context, imageRef string, info *ProvenanceInfo) error {
+	// Security: Create context with timeout to prevent long-running operations
+	timeoutCtx, cancel := context.WithTimeout(ctx, pp.processingTimeout)
+	defer cancel()
+
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
 		return fmt.Errorf("failed to parse image reference: %w", err)
 	}
 
-	// Get the image's attestations
-	attestations, err := pp.getAttestations(ctx, ref)
+	// Get the image's attestations with timeout
+	attestations, err := pp.getAttestations(timeoutCtx, ref)
 	if err != nil {
 		return fmt.Errorf("failed to get attestations: %w", err)
 	}
@@ -141,11 +213,29 @@ func (pp *ProvenanceParser) parseImageProvenance(ctx context.Context, imageRef s
 		return fmt.Errorf("no provenance attestations found")
 	}
 
-	// Parse the first attestation
-	for _, attestation := range attestations {
+	// Security: Limit number of attestations processed
+	attestationsToProcess := attestations
+	if len(attestations) > pp.maxAttestations {
+		if pp.verbose {
+			fmt.Printf("Warning: limiting attestations from %d to %d for image %s\n",
+				len(attestations), pp.maxAttestations, imageRef)
+		}
+		attestationsToProcess = attestations[:pp.maxAttestations]
+	}
+
+	// Parse attestations with proper memory management
+	for i, attestation := range attestationsToProcess {
+		// Security: Check for timeout on each iteration
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("provenance parsing timed out after processing %d attestations", i)
+		default:
+			// Continue processing
+		}
+
 		if err := pp.parseAttestationPayload(attestation, info); err != nil {
 			if pp.verbose {
-				fmt.Printf("Warning: failed to parse attestation for %s: %v\n", imageRef, err)
+				fmt.Printf("Warning: failed to parse attestation %d for %s: %v\n", i, imageRef, err)
 			}
 			continue
 		}
@@ -158,7 +248,7 @@ func (pp *ProvenanceParser) parseImageProvenance(ctx context.Context, imageRef s
 // getAttestations retrieves attestations for an image using cosign SDK
 func (pp *ProvenanceParser) getAttestations(ctx context.Context, ref name.Reference) ([]cosign.AttestationPayload, error) {
 	remoteOpts := []remote.Option{}
-	
+
 	// Get all attestations from the image (no predicate type filter)
 	attestations, err := cosign.FetchAttestationsForReference(ctx, ref, "", remoteOpts...)
 	if err != nil {
@@ -168,24 +258,61 @@ func (pp *ProvenanceParser) getAttestations(ctx context.Context, ref name.Refere
 	return attestations, nil
 }
 
-// parseAttestationPayload parses a single attestation payload
+// parseAttestationPayload parses a single attestation payload with memory protection
 func (pp *ProvenanceParser) parseAttestationPayload(attestation cosign.AttestationPayload, info *ProvenanceInfo) error {
-	// AttestationPayload.PayLoad is a base64-encoded JSON string
+	// Security: Check raw payload size before processing
+	if int64(len(attestation.PayLoad)) > pp.maxPayloadSize {
+		return fmt.Errorf("attestation payload too large: %d bytes exceeds maximum of %d bytes",
+			len(attestation.PayLoad), pp.maxPayloadSize)
+	}
+
 	if pp.verbose {
 		fmt.Printf("Debug: Raw attestation payload: %s\n", attestation.PayLoad[:min(100, len(attestation.PayLoad))])
 	}
-	
-	// Base64 decode the payload
-	decodedPayload, err := base64.StdEncoding.DecodeString(attestation.PayLoad)
-	if err != nil {
-		return fmt.Errorf("failed to base64 decode attestation payload: %w", err)
+
+	var decodedPayload []byte
+	var err error
+
+	// Security: Handle both base64-encoded and raw JSON payloads gracefully
+	// First check if the payload looks like JSON (starts with '{' or '[')
+	trimmedPayload := strings.TrimSpace(attestation.PayLoad)
+	if strings.HasPrefix(trimmedPayload, "{") || strings.HasPrefix(trimmedPayload, "[") {
+		// Payload appears to be raw JSON, use it directly
+		decodedPayload = []byte(trimmedPayload)
+		if pp.verbose {
+			fmt.Printf("Debug: Using raw JSON payload\n")
+		}
+	} else {
+		// Assume it's base64-encoded, attempt to decode
+		decodedPayload, err = base64.StdEncoding.DecodeString(attestation.PayLoad)
+		if err != nil {
+			// If base64 decoding fails, try raw payload as fallback
+			decodedPayload = []byte(attestation.PayLoad)
+			if pp.verbose {
+				fmt.Printf("Debug: Base64 decoding failed, using raw payload: %v\n", err)
+			}
+		} else if pp.verbose {
+			fmt.Printf("Debug: Successfully base64 decoded payload\n")
+		}
 	}
-	
+
+	// Security: Validate decoded payload size again after decoding to prevent expansion attacks
+	if int64(len(decodedPayload)) > pp.maxPayloadSize {
+		return fmt.Errorf("decoded payload too large: %d bytes exceeds maximum of %d bytes",
+			len(decodedPayload), pp.maxPayloadSize)
+	}
+
 	if pp.verbose {
 		fmt.Printf("Debug: Decoded payload preview: %s\n", string(decodedPayload[:min(200, len(decodedPayload))]))
 	}
-	
-	return pp.parseProvenanceData(decodedPayload, info)
+
+	// Parse the data with proper memory management
+	err = pp.parseProvenanceData(decodedPayload, info)
+
+	// Security: Explicit cleanup of large byte slices to help GC
+	decodedPayload = nil
+
+	return err
 }
 
 func min(a, b int) int {
@@ -199,7 +326,7 @@ func min(a, b int) int {
 func (pp *ProvenanceParser) parseProvenanceData(attestationJSON []byte, info *ProvenanceInfo) error {
 	// Handle both single-line JSON and newline-separated JSON
 	data := strings.TrimSpace(string(attestationJSON))
-	
+
 	// If it's a single line JSON, try to parse it directly
 	if strings.HasPrefix(data, "{") && !strings.Contains(data, "\n") {
 		return pp.parseSingleAttestation([]byte(data), info)
@@ -258,10 +385,10 @@ func (pp *ProvenanceParser) parseSingleAttestation(attestationJSON []byte, info 
 func (pp *ProvenanceParser) isSLSAProvenance(attestation *SLSAAttestation) bool {
 	predicateType := attestation.PredicateType
 	result := predicateType == "https://slsa.dev/provenance/v0.1" ||
-		      predicateType == "https://slsa.dev/provenance/v0.2" ||
-		      predicateType == "https://slsa.dev/provenance/v1" ||
-		      predicateType == "slsaprovenance" // fallback for non-standard predicate types
-	
+		predicateType == "https://slsa.dev/provenance/v0.2" ||
+		predicateType == "https://slsa.dev/provenance/v1" ||
+		predicateType == "slsaprovenance" // fallback for non-standard predicate types
+
 	if pp.verbose {
 		fmt.Printf("Debug: isSLSAProvenance check - predicateType='%s', result=%t\n", predicateType, result)
 	}
@@ -447,7 +574,7 @@ func (pp *ProvenanceParser) ExtractComponentName(ctx context.Context, imageRef s
 		if err := pp.parseAttestationPayload(attestation, &info); err != nil {
 			continue // Try next attestation
 		}
-		
+
 		if info.ComponentName != "" {
 			return info.ComponentName, nil
 		}
@@ -479,7 +606,7 @@ func (pp *ProvenanceParser) ExtractApplicationName(ctx context.Context, imageRef
 		if err := pp.parseAttestationPayload(attestation, &info); err != nil {
 			continue // Try next attestation
 		}
-		
+
 		if info.ApplicationName != "" {
 			return info.ApplicationName, nil
 		}
@@ -511,7 +638,7 @@ func (pp *ProvenanceParser) ExtractNamespace(ctx context.Context, imageRef strin
 		if err := pp.parseAttestationPayload(attestation, &info); err != nil {
 			continue // Try next attestation
 		}
-		
+
 		if info.Namespace != "" {
 			return info.Namespace, nil
 		}
