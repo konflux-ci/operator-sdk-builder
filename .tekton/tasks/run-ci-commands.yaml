@@ -1,0 +1,49 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-ci-commands
+  description: |
+    Runs arbitrary CI commands defined in the repository. This task is designed to be flexible
+    and can execute any CI commands specified via matrix parameters.
+spec:
+  params:
+    - name: SOURCE_ARTIFACT
+      description: OCI artifact containing the source code
+      type: string
+    - name: CI_COMMAND
+      description: The CI command to execute (e.g., 'make ci-bundle-tool', 'npm test', etc.)
+      type: string
+  stepTemplate:
+    volumeMounts:
+      - name: workdir
+        mountPath: /var/workdir
+  volumes:
+    - name: workdir
+      emptyDir: {}
+  steps:
+    - name: use-trusted-artifact
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:f7138b497698ab9d7ee11101dcfe431a13c9bd74bf0e22c844f1b8c31fae16ad
+      args:
+        - use
+        - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+    - name: run-ci-command
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      workingDir: /var/workdir/source
+      script: |
+        #!/bin/bash
+        set -e
+        
+        echo "Running CI command: $(CI_COMMAND)"
+        
+        # Install required tools
+        microdnf update -y
+        microdnf install -y make git
+        
+        # Run the specified CI command
+        echo "Executing: $(CI_COMMAND)"
+        eval $(CI_COMMAND)
+        
+        echo "CI command completed successfully: $(CI_COMMAND)"
+      env:
+        - name: CI_COMMAND
+          value: $(params.CI_COMMAND)
