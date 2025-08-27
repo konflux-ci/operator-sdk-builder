@@ -1,0 +1,39 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: test-operator.v1.0.0
+  namespace: default
+spec:
+  displayName: Test Operator
+  version: 1.0.0
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+      - name: test-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              name: test-operator
+          template:
+            metadata:
+              labels:
+                name: test-operator
+            spec:
+              containers:
+              - name: test-operator
+                image: quay.io/test/operator:v1.0.0
+                env:
+                - name: RELATED_IMAGE_UTILITY
+                  value: quay.io/test/utility:latest
+              - name: sidecar
+                image: registry.redhat.io/ubi9/ubi-minimal:latest
+              initContainers:
+              - name: init-container
+                image: quay.io/test/init:v1.0.0
+  relatedImages:
+  - name: operator
+    image: quay.io/test/operator:v1.0.0
+  - name: utility
+    image: quay.io/test/utility:latest

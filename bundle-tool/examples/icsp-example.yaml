@@ -1,0 +1,15 @@
+apiVersion: operator.openshift.io/v1alpha1
+kind: ImageContentSourcePolicy
+metadata:
+  name: konflux-dev-mapping
+spec:
+  repositoryDigestMirrors:
+  - source: registry.redhat.io
+    mirrors:
+    - quay.io/redhat-user-workloads
+  - source: registry.redhat.io/ubi8
+    mirrors:
+    - quay.io/redhat-user-workloads/konflux/ubi8
+  - source: quay.io/operator-framework
+    mirrors:
+    - quay.io/redhat-user-workloads/operator-framework-dev

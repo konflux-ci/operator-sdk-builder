@@ -66,6 +66,8 @@ spec:
     - {path: operator-sdk, type: gomod}
         # controller-tools submodule
     - {path: controller-tools, type: gomod}
+        # bundle-tool submodule
+    - {path: bundle-tool, type: gomod}
         # RPMs
     - {path: ., type: rpm}
     description: Build dependencies to be prefetched by Cachi2
@@ -94,6 +96,11 @@ spec:
     - linux/x86_64
     description: List of platforms to build the container images on. The available set of values is determined by the configuration of the multi-platform-controller.
     name: build-platforms
+    type: array
+  - default:
+    - "make ci-bundle-tool"
+    description: Array of CI commands to execute before building images (only for pull requests)
+    name: ci-commands
     type: array
   results:
   - description: ''
@@ -183,6 +190,28 @@ spec:
       workspace: git-auth
     - name: netrc
       workspace: netrc
+  - name: run-ci-commands
+    matrix:
+      params:
+      - name: CI_COMMAND
+        value: $(params.ci-commands)
+    params:
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
+    runAfter:
+    - clone-repository
+    taskRef:
+      name: run-ci-commands
+      kind: task
+    when:
+    - input: $(tasks.init.results.build)
+      operator: in
+      values:
+      - 'true'
+    - input: $(params.ci-commands[0])
+      operator: notin
+      values:
+      - ""
   - matrix:
       params:
       - name: PLATFORM
@@ -217,6 +246,7 @@ spec:
       value: 'true'
     runAfter:
     - prefetch-dependencies
+    - run-ci-commands
     taskRef:
       params:
       - name: name

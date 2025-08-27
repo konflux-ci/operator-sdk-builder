@@ -37,6 +37,9 @@ spec:
       value: "true"
     - name: build-source-image
       value: "true"
+    - name: ci-commands
+      value: 
+      - ""
   taskRunSpecs:
     - pipelineTaskName: build-source-image
       stepSpecs:

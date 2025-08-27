@@ -1,0 +1,12 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: empty-operator.v1.0.0
+  namespace: default
+spec:
+  displayName: Empty Operator
+  version: 1.0.0
+  install:
+    strategy: deployment
+    spec:
+      deployments: []
