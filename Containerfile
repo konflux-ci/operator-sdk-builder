@@ -30,6 +30,8 @@ COPY --from=opm-builder /opt/app-root/src/opm /bin
 COPY --from=kustomize-builder /opt/app-root/src/kustomize/kustomize /bin
 COPY --from=controller-gen-builder /opt/app-root/src/controller-gen /bin
 COPY files/policy.json /etc/containers/policy.json
+COPY files/registry.access.redhat.com.yaml /etc/containers/registries.d/registry.access.redhat.com.yaml
+COPY files/registry.redhat.io.yaml /etc/containers/registries.d/registry.redhat.io.yaml
 
 ENV GOROOT=/usr/lib/golang
 ENV PATH=${PATH}:${GOROOT}/bin
