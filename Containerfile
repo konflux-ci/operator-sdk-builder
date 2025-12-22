@@ -1,28 +1,28 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1765311584 as osdk-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1766405866 as osdk-builder
 
 COPY --chown=default ./operator-sdk/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN  ls -l && CGO_ENABLED=0 GOOS=linux go build -a -tags=containers_image_openpgp -o operator-sdk cmd/operator-sdk/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1765311584 as opm-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1766405866 as opm-builder
 
 COPY --chown=default ./operator-registry/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -tags=containers_image_openpgp -o opm cmd/opm/main.go
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1765311584 as kustomize-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1766405866 as kustomize-builder
 
 COPY --chown=default ./kustomize/. /opt/app-root/src/
 WORKDIR /opt/app-root/src/kustomize
 RUN ls -l && CGO_ENABLED=0 GOOS=linux GOWORK=off go build -a -o kustomize .
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1765311584 as controller-gen-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1766405866 as controller-gen-builder
 
 COPY --chown=default ./controller-tools/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o controller-gen ./cmd/controller-gen
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1765311584
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3-1766405866
 
 COPY LICENSE /licenses
 COPY --from=osdk-builder /opt/app-root/src/operator-sdk /bin
