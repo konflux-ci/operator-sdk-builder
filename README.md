@@ -9,10 +9,11 @@ The builder image contains the following tools:
 - [controller-gen](https://github.com/kubernetes-sigs/controller-tools)
 - [opm](https://github.com/operator-framework/operator-registry)
 - [kustomize](https://kustomize.io/)
+- [yq](https://github.com/mikefarah/yq)
 - [envsubst](https://www.gnu.org/software/gettext/manual/html_node/envsubst-Invocation.html)
 
 Refer to the [.gitmodules](.gitmodules) file in order
-to see the versions of `operator-sdk`, `controller-tools`, `operator-registry`, and `kustomize`.
+to see the versions of `operator-sdk`, `controller-tools`, `operator-registry`, `kustomize`, and `yq`.
 
 ## Usage
 
