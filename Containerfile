@@ -22,6 +22,12 @@ COPY --chown=default ./controller-tools/. /opt/app-root/src/
 WORKDIR /opt/app-root/src
 RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o controller-gen ./cmd/controller-gen
 
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.5-1770654497 as yq-builder
+
+COPY --chown=default ./yq/. /opt/app-root/src/
+WORKDIR /opt/app-root/src
+RUN ls -l && CGO_ENABLED=0 GOOS=linux go build -a -o yq .
+
 FROM registry.access.redhat.com/ubi9/go-toolset:1.25.5-1770654497
 
 COPY LICENSE /licenses
@@ -29,6 +35,7 @@ COPY --from=osdk-builder /opt/app-root/src/operator-sdk /bin
 COPY --from=opm-builder /opt/app-root/src/opm /bin
 COPY --from=kustomize-builder /opt/app-root/src/kustomize/kustomize /bin
 COPY --from=controller-gen-builder /opt/app-root/src/controller-gen /bin
+COPY --from=yq-builder /opt/app-root/src/yq /bin
 COPY files/policy.json /etc/containers/policy.json
 COPY files/registry.access.redhat.com.yaml /etc/containers/registries.d/registry.access.redhat.com.yaml
 COPY files/registry.redhat.io.yaml /etc/containers/registries.d/registry.redhat.io.yaml

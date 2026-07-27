@@ -9,6 +9,7 @@ The final image includes:
 - **controller-gen** — Kubernetes API code generator
 - **opm** — Operator Registry package manager
 - **kustomize** — Kubernetes configuration management
+- **yq** — YAML/JSON/XML processor and parser
 - **envsubst** — GNU gettext environment variable substitution
 
 ## Repository Structure
@@ -21,6 +22,7 @@ The final image includes:
 ├── kustomize/                 # Submodule: kubernetes-sigs/kustomize
 ├── operator-registry/         # Submodule: operator-framework/operator-registry
 ├── controller-tools/          # Submodule: kubernetes-sigs/controller-tools
+├── yq/                        # Submodule: mikefarah/yq
 ├── files/                     # Container config (policy.json, registry configs)
 ├── .tekton/                   # Tekton CI/CD pipelines
 │   ├── build-pipeline.yaml
@@ -42,7 +44,8 @@ There is no Makefile. The project is entirely built via `Containerfile` using mu
 2. **opm-builder** — builds `opm` binary
 3. **kustomize-builder** — builds `kustomize` binary
 4. **controller-gen-builder** — builds `controller-gen` binary
-5. **Final stage** — copies all binaries into a UBI 9 Go toolset image
+5. **yq-builder** — builds `yq` binary
+6. **Final stage** — copies all binaries into a UBI 9 Go toolset image
 
 All binaries are built statically: `CGO_ENABLED=0 GOOS=linux`.
 
