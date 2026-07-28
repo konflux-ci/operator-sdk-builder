@@ -14,3 +14,6 @@
 	path = controller-tools
 	url = https://github.com/kubernetes-sigs/controller-tools.git
 	branch = master
+[submodule "yq"]
+	path = yq
+	url = https://github.com/mikefarah/yq.git
