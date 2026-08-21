@@ -1,0 +1,13 @@
+---
+# Hadolint config for operator-sdk-builder container image.
+ignored:
+  - DL3002
+  - DL3003
+  - DL3013
+  - DL3040
+  - DL3041
+  - DL3066
+  - DL4006
+trustedRegistries:
+  - registry.access.redhat.com
+  - registry.redhat.io
