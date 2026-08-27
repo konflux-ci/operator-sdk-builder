@@ -1,5 +1,5 @@
 ---
 # enabling signature verification for registry.redhat.io
 docker:
-     registry.redhat.io:
-         sigstore: https://registry.redhat.io/containers/sigstore
+  registry.redhat.io:
+    sigstore: https://registry.redhat.io/containers/sigstore
