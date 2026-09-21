@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "pinDigests": true,
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackagePrefixes": ["registry.access.redhat.com"],
+      "versioning": "redhat"
+    }
+  ]
+}
