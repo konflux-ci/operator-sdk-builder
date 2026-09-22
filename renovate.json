@@ -10,8 +10,10 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackagePrefixes": ["registry.access.redhat.com"],
-      "versioning": "redhat"
+      "versioning": "redhat",
+      "matchPackageNames": [
+        "registry.access.redhat.com{/,}**"
+      ]
     }
   ]
 }
