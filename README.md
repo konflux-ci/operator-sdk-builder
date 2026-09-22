@@ -21,7 +21,7 @@ to see the versions of `operator-sdk`, `controller-tools`, `operator-registry`, 
 
 FROM konflux-ci/operator-sdk-builder:latest as builder
 
-COPY ./. /repo
+COPY --chown=1001:0 ./. /repo
 WORKDIR /repo
 RUN kustomize build config/manifests/ \
     | operator-sdk generate bundle --output-dir build

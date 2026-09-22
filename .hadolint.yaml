@@ -1,7 +1,6 @@
 ---
 # Hadolint config for operator-sdk-builder container image.
 ignored:
-  - DL3002
   - DL3003
   - DL3013
   - DL3040
